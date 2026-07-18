@@ -441,6 +441,7 @@ export function Workbench() {
   async function rulesWithAiAnswers(requestedCount: number): Promise<GenerationRule[]> {
     if (!form) return rules;
     const textQuestions = form.questions.filter(needsAiText);
+    const aiSampleCount = Math.min(requestedCount, 100);
     let nextRules = [...rules];
 
     for (let index = 0; index < textQuestions.length; index += 1) {
@@ -463,7 +464,7 @@ export function Workbench() {
             ...(constraints.minLength ? { minLength: constraints.minLength } : {}),
             ...(constraints.maxLength ? { maxLength: constraints.maxLength } : {}),
           },
-          count: requestedCount,
+          count: aiSampleCount,
           existingAnswers: currentRule.samples.slice(0, 100),
           locale: form.locale || "ko",
         }),
@@ -482,7 +483,7 @@ export function Workbench() {
 
   async function generate() {
     if (!form || busy) return;
-    const requestedCount = Math.max(1, Math.min(100, Math.floor(count || 1)));
+    const requestedCount = Math.max(1, Math.min(500, Math.floor(count || 1)));
     setCount(requestedCount);
     setGenerating(true);
     setError(null);
@@ -648,7 +649,7 @@ export function Workbench() {
             <div className="generation-controls">
               <label className="field">
                 생성 개수
-                <input type="number" min={1} max={100} value={count} disabled={busy} onChange={(event) => setCount(Number(event.target.value))} />
+                <input type="number" min={1} max={500} value={count} disabled={busy} onChange={(event) => setCount(Number(event.target.value))} />
               </label>
               <button className="primary-button" type="button" disabled={busy} onClick={() => void generate()}>
                 {generating ? "생성 중" : "생성"}
