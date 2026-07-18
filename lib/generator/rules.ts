@@ -3,6 +3,7 @@ import type {
   GenerationRule,
   ImportedForm,
 } from "../domain/form-schema";
+import { constraintsForQuestion } from "./constraints";
 
 function textSamples(question: FormQuestion): string[] {
   const text = `${question.title} ${question.description ?? ""}`;
@@ -20,7 +21,12 @@ function textSamples(question: FormQuestion): string[] {
 }
 
 export function defaultRuleForQuestion(question: FormQuestion): GenerationRule {
-  if (question.type === "short_text" || question.type === "paragraph") {
+  if (
+    question.type === "short_text" ||
+    question.type === "paragraph" ||
+    question.type === "date" ||
+    question.type === "time"
+  ) {
     return {
       questionId: question.id,
       enabled: true,
@@ -31,6 +37,7 @@ export function defaultRuleForQuestion(question: FormQuestion): GenerationRule {
   }
 
   if (question.type === "checkboxes") {
+    const constraints = constraintsForQuestion(question);
     const selectableCount = Math.max(
       1,
       question.options.filter((option) => !option.isOther).length,
@@ -39,12 +46,18 @@ export function defaultRuleForQuestion(question: FormQuestion): GenerationRule {
       questionId: question.id,
       enabled: true,
       kind: "checkboxes",
-      minSelections: question.required ? 1 : 0,
-      maxSelections: Math.min(3, selectableCount),
+      minSelections: Math.max(
+        question.required ? 1 : 0,
+        constraints.minSelections ?? 0,
+      ),
+      maxSelections: Math.min(
+        constraints.maxSelections ?? 3,
+        selectableCount + (question.options.some((option) => option.isOther) ? 1 : 0),
+      ),
     };
   }
 
-  if (question.type === "grid_single") {
+  if (question.type === "grid_single" || question.type === "grid_checkbox") {
     return {
       questionId: question.id,
       enabled: true,
@@ -74,5 +87,10 @@ export function defaultRuleForQuestion(question: FormQuestion): GenerationRule {
 }
 
 export function createDefaultRules(form: ImportedForm): GenerationRule[] {
-  return form.questions.map(defaultRuleForQuestion);
+  return form.questions.map((question) => ({
+    ...defaultRuleForQuestion(question),
+    // Optional questions are occasionally left unanswered, as real response
+    // sets are. This is an internal deterministic rule, not a seed/UI setting.
+    omitProbability: question.required ? 0 : 0.15,
+  }));
 }

@@ -6,8 +6,20 @@ import type {
   GenerationRule,
   ImportedForm,
 } from "../domain/form-schema";
+import {
+  constraintsForQuestion,
+  padTextToMinimum,
+} from "./constraints";
+import { resolveResponseNavigation } from "./navigation";
 
-export const RESPONSE_GENERATOR_VERSION = "seeded-preview/2026-07-v1";
+export const RESPONSE_GENERATOR_VERSION = "deterministic-preview/2026-07-v2";
+
+export interface GeneratedResponseWithNavigation extends GeneratedResponse {
+  visitedSectionIds: string[];
+  pageHistory: number[];
+}
+
+export type GeneratorRule = GenerationRule & { omitProbability?: number };
 
 function hashSeed(seed: string): number {
   let hash = 2166136261;
@@ -63,39 +75,164 @@ function shuffled<T>(random: () => number, values: T[]): T[] {
   return copy;
 }
 
+function customOtherAnswer(responseIndex: number): string {
+  return `기타 응답 ${responseIndex + 1}`;
+}
+
+function numericTextAnswer(
+  question: FormQuestion,
+  responseIndex: number,
+): string {
+  const constraints = constraintsForQuestion(question);
+  if (constraints.excludedNumberRange) {
+    const { min, max } = constraints.excludedNumberRange;
+    return String(Number.isFinite(min - 1) ? min - 1 : max + 1);
+  }
+  const minimum = constraints.minValue ?? 1;
+  const maximum = constraints.maxValue ?? Math.max(minimum, minimum + 100);
+  const low = Math.min(minimum, maximum);
+  const high = Math.max(minimum, maximum);
+  if (low === high) return String(low);
+  if (Number.isInteger(low) && Number.isInteger(high) && high - low <= 10_000) {
+    return String(low + (responseIndex % (high - low + 1)));
+  }
+  const fraction = (responseIndex % 11) / 10;
+  return String(Number((low + (high - low) * fraction).toPrecision(12)));
+}
+
+function normalizedTextAnswer(
+  question: FormQuestion,
+  candidate: string,
+  responseIndex: number,
+): string {
+  const constraints = constraintsForQuestion(question);
+  if (constraints.textKind === "number") {
+    return numericTextAnswer(question, responseIndex);
+  }
+  if (constraints.textKind === "email") {
+    return `test${responseIndex + 1}@example.com`;
+  }
+  if (constraints.textKind === "url") {
+    return `https://example.com/response/${responseIndex + 1}`;
+  }
+  let answer = candidate;
+  if (constraints.minLength !== undefined) {
+    answer = padTextToMinimum(answer, Math.max(0, Math.trunc(constraints.minLength)));
+  }
+  if (constraints.maxLength !== undefined) {
+    answer = answer.slice(0, Math.max(0, Math.trunc(constraints.maxLength)));
+  }
+  return answer;
+}
+
+function generatedDateAnswer(
+  question: FormQuestion,
+  responseIndex: number,
+): string {
+  const extended = question as FormQuestion & {
+    date?: { includeYear?: boolean; includeTime?: boolean };
+  };
+  const year = 2026 + (responseIndex % 2);
+  const month = String((responseIndex % 12) + 1).padStart(2, "0");
+  const day = String((responseIndex % 27) + 1).padStart(2, "0");
+  const date = extended.date?.includeYear === false
+    ? `${month}-${day}`
+    : `${year}-${month}-${day}`;
+  if (!extended.date?.includeTime) return date;
+  const hour = String(8 + (responseIndex % 10)).padStart(2, "0");
+  const minute = String((responseIndex * 7) % 60).padStart(2, "0");
+  return `${date}T${hour}:${minute}`;
+}
+
+function generatedTimeAnswer(
+  question: FormQuestion,
+  responseIndex: number,
+): string {
+  const extended = question as FormQuestion & {
+    time?: { kind?: "time_of_day" | "duration" };
+  };
+  if (extended.time?.kind === "duration") {
+    const hour = responseIndex % 4;
+    const minute = String((responseIndex * 11) % 60).padStart(2, "0");
+    const second = String((responseIndex * 13) % 60).padStart(2, "0");
+    return `${hour}:${minute}:${second}`;
+  }
+  const hour = String(8 + (responseIndex % 12)).padStart(2, "0");
+  const minute = String((responseIndex * 5) % 60).padStart(2, "0");
+  return `${hour}:${minute}`;
+}
+
+function shouldOmitOptional(
+  question: FormQuestion,
+  rule: GeneratorRule,
+  random: () => number,
+): boolean {
+  if (question.required || !rule.enabled) return false;
+  const configured = rule.omitProbability;
+  const probability = Number.isFinite(configured)
+    ? Math.max(0, Math.min(1, configured!))
+    : 0.15;
+  return random() < probability;
+}
+
 function answerQuestion(
   question: FormQuestion,
-  rule: GenerationRule,
+  rule: GeneratorRule,
   responseIndex: number,
   random: () => number,
 ): GeneratedAnswer | undefined {
   if (!rule.enabled) return undefined;
 
-  if (rule.kind === "text") {
-    if (rule.samples.length === 0) return `샘플 응답 ${responseIndex + 1}`;
-    if (rule.mode === "sequence") {
-      return rule.samples[responseIndex % rule.samples.length];
-    }
-    return pick(random, rule.samples) ?? `샘플 응답 ${responseIndex + 1}`;
+  if (question.type === "date") {
+    return generatedDateAnswer(question, responseIndex);
+  }
+  if (question.type === "time") {
+    return generatedTimeAnswer(question, responseIndex);
   }
 
-  const selectableOptions = question.options.filter((option) => !option.isOther);
+  if (rule.kind === "text") {
+    if (rule.samples.length === 0) {
+      return normalizedTextAnswer(
+        question,
+        `샘플 응답 ${responseIndex + 1}`,
+        responseIndex,
+      );
+    }
+    if (rule.mode === "sequence") {
+      return normalizedTextAnswer(
+        question,
+        rule.samples[responseIndex % rule.samples.length],
+        responseIndex,
+      );
+    }
+    return normalizedTextAnswer(
+      question,
+      pick(random, rule.samples) ?? `샘플 응답 ${responseIndex + 1}`,
+      responseIndex,
+    );
+  }
+
+  const regularOptions = question.options.filter((option) => !option.isOther);
+  const otherOption = question.options.find((option) => option.isOther);
 
   if (rule.kind === "choice") {
     if (rule.mode === "fixed") {
       return (
-        selectableOptions.find((option) => option.value === rule.fixedValue)?.label ??
-        selectableOptions[0]?.label
+        regularOptions.find((option) => option.value === rule.fixedValue)?.label ??
+        regularOptions[0]?.label
       );
     }
+    if (otherOption && random() < 0.08) return customOtherAnswer(responseIndex);
     const option =
       rule.mode === "middle_weighted"
-        ? pickMiddleWeighted(random, selectableOptions)
-        : pick(random, selectableOptions);
+        ? pickMiddleWeighted(random, regularOptions)
+        : pick(random, regularOptions);
     return option?.label;
   }
 
   if (rule.kind === "checkboxes") {
+    const constraints = constraintsForQuestion(question);
+    const totalOptions = regularOptions.length + (otherOption ? 1 : 0);
     const requestedMin = Number.isFinite(rule.minSelections)
       ? Math.floor(rule.minSelections)
       : 0;
@@ -104,28 +241,56 @@ function answerQuestion(
       : requestedMin;
     const min = Math.max(
       question.required ? 1 : 0,
-      Math.min(requestedMin, selectableOptions.length),
+      Math.min(
+        constraints.exactSelections ?? constraints.minSelections ?? requestedMin,
+        totalOptions,
+      ),
     );
     const max = Math.min(
-      Math.max(min, requestedMax),
-      selectableOptions.length,
+      Math.max(
+        min,
+        constraints.exactSelections ?? constraints.maxSelections ?? requestedMax,
+      ),
+      totalOptions,
     );
-    const count = selectableOptions.length === 0 ? 0 : randomInt(random, min, max);
-    return shuffled(random, selectableOptions)
+    const pool = otherOption ? [...regularOptions, otherOption] : regularOptions;
+    const count = pool.length === 0 ? 0 : randomInt(random, min, max);
+    return shuffled(random, pool)
       .slice(0, count)
-      .map((option) => option.label);
+      .map((option) =>
+        option.isOther ? customOtherAnswer(responseIndex) : option.label,
+      );
   }
 
   if (rule.kind === "grid" && question.grid) {
+    const constraints = constraintsForQuestion(question);
+    const columnOptions = question.grid.columns.map((column) => ({
+      label: column.label,
+      value: column.label,
+      isOther: false,
+    }));
+    if (question.type === "grid_checkbox") {
+      return Object.fromEntries(
+        question.grid.rows.map((row) => {
+          const max = Math.min(3, columnOptions.length);
+          const count = columnOptions.length === 0 ? 0 : randomInt(random, 1, max);
+          return [
+            row.label,
+            shuffled(random, columnOptions)
+              .slice(0, count)
+              .map((column) => column.label),
+          ];
+        }),
+      );
+    }
+    const available = constraints.uniqueGridColumns
+      ? shuffled(random, columnOptions)
+      : columnOptions;
     return Object.fromEntries(
-      question.grid.rows.map((row) => {
-        const columnOptions = question.grid!.columns.map((column) => ({
-          label: column.label,
-          value: column.label,
-          isOther: false,
-        }));
-        const column =
-          rule.mode === "middle_weighted"
+      question.grid.rows.map((row, rowIndex) => {
+        const column = constraints.uniqueGridColumns
+          ? available[rowIndex]
+          : rule.mode === "middle_weighted"
             ? pickMiddleWeighted(random, columnOptions)
             : pick(random, columnOptions);
         return [row.label, column?.label ?? ""];
@@ -138,17 +303,20 @@ function answerQuestion(
 
 export function generateResponses(input: {
   form: ImportedForm;
-  rules: GenerationRule[];
+  rules: GeneratorRule[];
   count: number;
-  seed: string;
-}): GeneratedResponse[] {
+  seed?: string;
+}): GeneratedResponseWithNavigation[] {
   const requestedCount = Number.isFinite(input.count) ? Math.floor(input.count) : 1;
   const count = Math.max(1, Math.min(500, requestedCount));
-  const random = mulberry32(hashSeed(input.seed));
+  const internalSeed =
+    input.seed?.trim() ||
+    `${input.form.source.publicId}:${input.form.parserVersion}:${JSON.stringify(input.rules)}`;
+  const random = mulberry32(hashSeed(internalSeed));
   const ruleByQuestion = new Map(
     input.rules.map((rule) => [rule.questionId, rule]),
   );
-  const batchFingerprint = `${input.form.source.publicId}:${input.form.parserVersion}:${JSON.stringify(input.rules)}:${input.seed}`;
+  const batchFingerprint = `${input.form.source.publicId}:${input.form.parserVersion}:${JSON.stringify(input.rules)}:${internalSeed}`;
 
   return Array.from({ length: count }, (_, responseIndex) => {
     const answers: Record<string, GeneratedAnswer> = {};
@@ -156,14 +324,25 @@ export function generateResponses(input: {
     for (const question of input.form.questions) {
       const rule = ruleByQuestion.get(question.id);
       if (!rule) continue;
+      if (shouldOmitOptional(question, rule, random)) continue;
       const answer = answerQuestion(question, rule, responseIndex, random);
       if (answer !== undefined) answers[question.id] = answer;
+    }
+
+    const navigation = resolveResponseNavigation(
+      input.form,
+      answers as Record<string, unknown>,
+    );
+    const reachedSections = new Set(navigation.visitedSectionIds);
+    for (const question of input.form.questions) {
+      if (!reachedSections.has(question.sectionId)) delete answers[question.id];
     }
 
     return {
       id: `${hashSeed(`${batchFingerprint}:${responseIndex}`).toString(16).padStart(8, "0")}${hashSeed(`${responseIndex}:${batchFingerprint}`).toString(16).padStart(8, "0")}`,
       index: responseIndex,
       answers,
+      ...navigation,
     };
   });
 }

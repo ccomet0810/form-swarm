@@ -1,58 +1,25 @@
 "use client";
 
-import {
-  AlertTriangle,
-  ArrowRight,
-  Braces,
-  Check,
-  CheckCircle2,
-  ChevronDown,
-  ChevronRight,
-  CircleDashed,
-  Download,
-  FlaskConical,
-  Info,
-  Layers3,
-  Link2,
-  LoaderCircle,
-  LockKeyhole,
-  PanelTop,
-  Play,
-  RefreshCw,
-  Settings2,
-  ShieldCheck,
-  Sparkles,
-  Table2,
-} from "lucide-react";
+/* eslint-disable @next/next/no-img-element */
+
 import { useMemo, useState } from "react";
 import type {
+  FormImageRef,
+  FormItem,
+  FormNavigationTarget,
   FormQuestion,
+  FormValidation,
   GeneratedAnswer,
   GeneratedResponse,
   GenerationRule,
   ImportedForm,
   QuestionType,
 } from "../../lib/domain/form-schema";
-import {
-  generateResponses,
-  RESPONSE_GENERATOR_VERSION,
-} from "../../lib/generator/engine";
+import { constraintsForQuestion } from "../../lib/generator/constraints";
+import { generateResponses } from "../../lib/generator/engine";
 import { createDefaultRules } from "../../lib/generator/rules";
 import { validateGeneratedResponse } from "../../lib/generator/validation";
-import { QuestionIcon } from "./icons";
-
-const SAMPLE_FORMS = [
-  {
-    label: "온보딩 경험 평가",
-    detail: "그리드 · 척도 · 별점",
-    url: "https://docs.google.com/forms/d/e/1FAIpQLSeoFC1jW6yqDNDx-RbAam_GfT7kBgrKwVDMFa9-wUEfFlDTdA/viewform",
-  },
-  {
-    label: "손글씨 폰트 설문",
-    detail: "체크박스 · 기타 · 필수",
-    url: "https://docs.google.com/forms/d/e/1FAIpQLSf4Wnw-bPB2CLK1Aj-YBXS1kZoZFiUEzWNjRmKNZjali6c85g/viewform",
-  },
-] as const;
+import { ResponseSummaryCard } from "./response-summary";
 
 const TYPE_LABEL: Record<QuestionType, string> = {
   short_text: "단답형",
@@ -60,77 +27,61 @@ const TYPE_LABEL: Record<QuestionType, string> = {
   single_choice: "객관식",
   dropdown: "드롭다운",
   checkboxes: "체크박스",
-  scale: "선형 척도",
+  scale: "선형 배율",
   grid_single: "객관식 그리드",
-  rating: "별점",
+  grid_checkbox: "체크박스 그리드",
+  rating: "등급",
   date: "날짜",
   time: "시간",
-  unknown: "미지원",
+  unknown: "미지원 유형",
 };
 
-const RULE_LABEL: Record<GenerationRule["kind"], string> = {
-  text: "샘플 풀",
-  choice: "선택 분포",
-  checkboxes: "선택 개수",
-  grid: "행별 선택",
-  unsupported: "생성 제외",
-};
-
-type Phase = "source" | "rules" | "preview";
+interface SubmissionProgress {
+  done: number;
+  accepted: number;
+  failed: number;
+  error: string | null;
+}
 
 function answerLabel(answer: GeneratedAnswer | undefined): string {
-  if (answer === undefined) return "—";
+  if (answer === undefined) return "응답 없음";
   if (typeof answer === "string") return answer;
-  if (Array.isArray(answer)) return answer.length > 0 ? answer.join(", ") : "선택 안 함";
+  if (Array.isArray(answer)) return answer.length > 0 ? answer.join(", ") : "선택 없음";
   return Object.entries(answer)
-    .map(([row, value]) => `${row}: ${value}`)
+    .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : value}`)
     .join(" · ");
 }
 
-function compactId(value: string): string {
-  return value.length > 16 ? `${value.slice(0, 8)}…${value.slice(-5)}` : value;
+function navigationLabel(target: FormNavigationTarget | null | undefined): string {
+  if (!target || target.kind === "next") return "다음 섹션";
+  if (target.kind === "submit") return "양식 제출";
+  if (target.kind === "section") return `섹션 ${target.sectionItemId}`;
+  return `알 수 없음 (${target.rawValue})`;
 }
 
-function Step({
-  index,
-  label,
-  active,
-  complete,
-}: {
-  index: number;
-  label: string;
-  active: boolean;
-  complete: boolean;
-}) {
-  return (
-    <div className={`flow-step ${active ? "is-active" : ""} ${complete ? "is-complete" : ""}`}>
-      <span className="flow-index">{complete ? <Check size={13} /> : index}</span>
-      <span>{label}</span>
-    </div>
-  );
+function validationLabel(validation: FormValidation): string {
+  if (validation.kind === "number_range") {
+    return `${validation.operator === "between" ? "숫자 범위" : "숫자 범위 제외"}: ${validation.min} ~ ${validation.max}${validation.errorMessage ? ` / ${validation.errorMessage}` : ""}`;
+  }
+  if (validation.kind === "text_length") {
+    return `글자 수 ${validation.operator === "min" ? "최소" : "최대"} ${validation.value}${validation.errorMessage ? ` / ${validation.errorMessage}` : ""}`;
+  }
+  return `선택 수 ${validation.operator === "exact" ? "정확히" : validation.operator === "min" ? "최소" : "최대"} ${validation.value}${validation.errorMessage ? ` / ${validation.errorMessage}` : ""}`;
 }
 
-function StatusPill({ phase }: { phase: Phase }) {
-  const labels: Record<Phase, string> = {
-    source: "링크 대기",
-    rules: "구조 분석 완료",
-    preview: "미리보기 준비됨",
-  };
+function ImageView({ image, className = "media-image" }: { image: FormImageRef; className?: string }) {
+  if (!image.url) {
+    return <p className="message">이미지 ID: {image.sourceId} (표시 URL 없음)</p>;
+  }
   return (
-    <span className={`status-pill status-${phase}`}>
-      <span className="status-dot" />
-      {labels[phase]}
-    </span>
-  );
-}
-
-function Metric({ label, value, detail }: { label: string; value: string | number; detail: string }) {
-  return (
-    <div className="metric-card">
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <small>{detail}</small>
-    </div>
+    <img
+      className={className}
+      src={image.url}
+      alt={image.altText ?? "Google Forms 이미지"}
+      width={image.width ?? undefined}
+      height={image.height ?? undefined}
+      loading="lazy"
+    />
   );
 }
 
@@ -140,536 +91,636 @@ function RuleEditor({
   onChange,
 }: {
   question: FormQuestion;
-  rule: GenerationRule;
-  onChange: (rule: GenerationRule) => void;
+  rule: GenerationRule | undefined;
+  onChange: (next: GenerationRule) => void;
 }) {
-  const enabled = rule.enabled;
-  const selectableOptionCount = question.options.filter(
-    (option) => !option.isOther,
-  ).length;
+  if (!rule || rule.kind === "unsupported") {
+    return <div className="rule-editor"><span>이 문항은 자동 생성에서 제외됩니다.</span></div>;
+  }
 
-  return (
-    <article className={`question-card ${enabled ? "" : "is-disabled"}`}>
-      <div className="question-head">
-        <div className="question-type-icon">
-          <QuestionIcon type={question.type} />
-        </div>
-        <div className="question-copy">
-          <div className="question-eyebrow">
-            <span>{TYPE_LABEL[question.type]}</span>
-            <span>{question.required ? "필수" : "선택"}</span>
-            <code title={question.entryIds.join(", ")}>
-              entry.{compactId(question.entryIds[0] ?? "없음")}
-              {question.entryIds.length > 1 ? ` +${question.entryIds.length - 1}` : ""}
-            </code>
-          </div>
-          <h3>{question.title}</h3>
-          {question.description && <p>{question.description}</p>}
-        </div>
-        <label className="switch-label">
-          <input
-            aria-label={`${question.title} 생성 포함`}
-            type="checkbox"
-            checked={enabled}
-            disabled={rule.kind === "unsupported" || question.required}
-            title={question.required ? "필수 문항은 생성에서 제외할 수 없습니다." : undefined}
-            onChange={(event) => onChange({ ...rule, enabled: event.target.checked } as GenerationRule)}
+  if (question.type === "date" || question.type === "time") {
+    return (
+      <div className="rule-editor">
+        <span>{question.type === "date" ? "유효한 날짜를 자동 생성합니다." : "유효한 시간을 자동 생성합니다."}</span>
+      </div>
+    );
+  }
+
+  if (rule.kind === "text") {
+    return (
+      <div className="rule-editor">
+        <label>
+          생성 순서
+          <select
+            value={rule.mode}
+            onChange={(event) => onChange({ ...rule, mode: event.target.value as "sequence" | "sample_pool" })}
+          >
+            <option value="sample_pool">문구 중 무작위</option>
+            <option value="sequence">위에서부터 순서대로</option>
+          </select>
+        </label>
+        <label className="wide-field">
+          생성 문구 (한 줄에 하나)
+          <textarea
+            value={rule.samples.join("\n")}
+            onChange={(event) => onChange({
+              ...rule,
+              samples: event.target.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean),
+            })}
           />
-          <span className="switch" aria-hidden="true" />
         </label>
       </div>
+    );
+  }
 
-      <div className="rule-row">
-        <span className="rule-kicker"><Settings2 size={14} /> {RULE_LABEL[rule.kind]}</span>
-        {rule.kind === "choice" && (
-          <label className="select-wrap">
-            <span className="sr-only">생성 분포</span>
+  if (rule.kind === "choice") {
+    const options = question.options.filter((option) => !option.isOther);
+    return (
+      <div className="rule-editor">
+        <label>
+          생성 방식
+          <select
+            value={rule.mode}
+            onChange={(event) => onChange({ ...rule, mode: event.target.value as "uniform" | "middle_weighted" | "fixed" })}
+          >
+            <option value="uniform">균등 무작위</option>
+            <option value="middle_weighted">가운데 값 중심</option>
+            <option value="fixed">고정 선택</option>
+          </select>
+        </label>
+        {rule.mode === "fixed" && (
+          <label>
+            고정 선택지
             <select
-              value={rule.mode}
-              disabled={!enabled}
-              onChange={(event) =>
-                onChange({ ...rule, mode: event.target.value } as GenerationRule)
-              }
-            >
-              <option value="uniform">균등 랜덤</option>
-              <option value="middle_weighted">중앙값 중심</option>
-              <option value="fixed">고정값</option>
-            </select>
-            <ChevronDown size={14} />
-          </label>
-        )}
-        {rule.kind === "choice" && rule.mode === "fixed" && (
-          <label className="select-wrap fixed-choice">
-            <span className="sr-only">고정 선택지</span>
-            <select
-              value={rule.fixedValue ?? question.options.find((option) => !option.isOther)?.value ?? ""}
-              disabled={!enabled}
+              value={rule.fixedValue ?? options[0]?.value ?? ""}
               onChange={(event) => onChange({ ...rule, fixedValue: event.target.value })}
             >
-              {question.options.filter((option) => !option.isOther).map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
+              {options.map((option) => (
+                <option key={`${option.index ?? option.value}:${option.value}`} value={option.value}>
+                  {option.label}
+                </option>
               ))}
             </select>
-            <ChevronDown size={14} />
           </label>
         )}
-        {rule.kind === "checkboxes" && (
-          <div className="range-editor">
-            <label>
-              최소
-              <input
-                type="number"
-                min={question.required ? 1 : 0}
-                max={selectableOptionCount}
-                value={rule.minSelections}
-                disabled={!enabled}
-                onChange={(event) =>
-                  onChange({ ...rule, minSelections: Number(event.target.value) })
-                }
-              />
-            </label>
-            <span>~</span>
-            <label>
-              최대
-              <input
-                type="number"
-                min={1}
-                max={selectableOptionCount}
-                value={rule.maxSelections}
-                disabled={!enabled}
-                onChange={(event) =>
-                  onChange({ ...rule, maxSelections: Number(event.target.value) })
-                }
-              />
-            </label>
-            <span className="muted">개 선택</span>
-          </div>
-        )}
-        {rule.kind === "text" && (
-          <div className="text-rule">
-            <label className="select-wrap">
-              <span className="sr-only">텍스트 생성 규칙</span>
-              <select
-                value={rule.mode}
-                disabled={!enabled}
-                onChange={(event) =>
-                  onChange({ ...rule, mode: event.target.value } as GenerationRule)
-                }
-              >
-                <option value="sample_pool">무작위 샘플</option>
-                <option value="sequence">순서대로 반복</option>
-              </select>
-              <ChevronDown size={14} />
-            </label>
-            <input
-              aria-label="샘플 응답"
-              className="sample-input"
-              maxLength={2_000}
-              value={rule.samples.join(" | ")}
-              disabled={!enabled}
-              onChange={(event) =>
-                onChange({
-                  ...rule,
-                  samples: event.target.value.split("|").map((value) => value.trim()).filter(Boolean),
-                })
-              }
-            />
-          </div>
-        )}
-        {rule.kind === "grid" && (
-          <label className="select-wrap">
-            <span className="sr-only">그리드 생성 규칙</span>
-            <select
-              value={rule.mode}
-              disabled={!enabled}
-              onChange={(event) => onChange({ ...rule, mode: event.target.value } as GenerationRule)}
-            >
-              <option value="uniform">행별 균등 랜덤</option>
-              <option value="middle_weighted">중앙 열 중심</option>
-            </select>
-            <ChevronDown size={14} />
-          </label>
-        )}
-        {rule.kind === "unsupported" && (
-          <span className="unsupported-note"><AlertTriangle size={14} /> 안전을 위해 제외됨</span>
-        )}
-        <span className="option-summary">
-          {question.grid
-            ? `${question.grid.rows.length}행 × ${question.grid.columns.length}열`
-            : question.options.length > 0
-              ? `${question.options.length}개 선택지`
-              : `${rule.kind === "text" ? rule.samples.length : 0}개 샘플`}
-        </span>
       </div>
+    );
+  }
+
+  if (rule.kind === "checkboxes") {
+    const maximum = Math.max(1, question.options.length);
+    return (
+      <div className="rule-editor">
+        <label>
+          최소 선택 수
+          <input
+            type="number"
+            min={question.required ? 1 : 0}
+            max={maximum}
+            value={rule.minSelections}
+            onChange={(event) => onChange({ ...rule, minSelections: Number(event.target.value) })}
+          />
+        </label>
+        <label>
+          최대 선택 수
+          <input
+            type="number"
+            min={1}
+            max={maximum}
+            value={rule.maxSelections}
+            onChange={(event) => onChange({ ...rule, maxSelections: Number(event.target.value) })}
+          />
+        </label>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rule-editor">
+      <label>
+        생성 방식
+        <select
+          value={rule.mode}
+          onChange={(event) => onChange({ ...rule, mode: event.target.value as "uniform" | "middle_weighted" })}
+        >
+          <option value="uniform">행별 균등 무작위</option>
+          <option value="middle_weighted">가운데 열 중심</option>
+        </select>
+      </label>
+    </div>
+  );
+}
+
+function QuestionView({
+  question,
+  rule,
+  onRuleChange,
+}: {
+  question: FormQuestion;
+  rule: GenerationRule | undefined;
+  onRuleChange: (next: GenerationRule) => void;
+}) {
+  return (
+    <article className="question-item">
+      <div className="question-title-row">
+        <h3>{question.title || "제목 없음"}</h3>
+        <span className="question-type">유형: {TYPE_LABEL[question.type]}</span>
+      </div>
+
+      {question.description && <p className="question-description">{question.description}</p>}
+
+      <dl className="question-meta">
+        <dt>필수</dt><dd>{question.required ? "O" : "X"}</dd>
+        <dt>item ID</dt><dd>{question.itemId}</dd>
+        <dt>entry ID</dt>
+        <dd>{question.entryIds.length > 0 ? question.entryIds.map((id) => <div key={id}>{id}</div>) : "없음"}</dd>
+        <dt>section ID</dt><dd>{question.sectionId}</dd>
+        <dt>원본 유형</dt><dd>{question.rawType}</dd>
+        {(question.validations ?? []).length > 0 && (
+          <><dt>응답 검증</dt><dd>{question.validations?.map((validation, index) => <div key={`${validation.kind}-${index}`}>{validationLabel(validation)}</div>)}</dd></>
+        )}
+        {question.scale && (
+          <><dt>배율</dt><dd>{question.scale.min} ~ {question.scale.max} / 낮은 값: {question.scale.lowLabel ?? "없음"} / 높은 값: {question.scale.highLabel ?? "없음"}</dd></>
+        )}
+        {question.rating && (
+          <><dt>등급</dt><dd>{question.rating.min} ~ {question.rating.max} / 아이콘: {question.rating.icon}</dd></>
+        )}
+        {question.date && (
+          <><dt>날짜 옵션</dt><dd>연도 {question.date.includeYear ? "포함" : "제외"}, 시간 {question.date.includeTime ? "포함" : "제외"}</dd></>
+        )}
+        {question.time && (
+          <><dt>시간 옵션</dt><dd>{question.time.kind === "duration" ? "기간" : "시각"}</dd></>
+        )}
+      </dl>
+
+      {(question.images ?? []).map((image) => <ImageView key={image.sourceId} image={image} />)}
+
+      {question.options.length > 0 && (
+        <ul className="options" aria-label={`${question.title} 선택지`}>
+          {question.options.map((option, index) => (
+            <li className="option" key={`${option.index ?? index}:${option.value}`}>
+              <span>{index + 1}.</span>
+              <div>
+                <strong>{option.label}{option.isOther ? " (기타)" : ""}</strong>
+                <small>값: {option.value}</small>
+                {option.branchTarget && <small>이동: {navigationLabel(option.branchTarget)}</small>}
+                {option.image && <ImageView image={option.image} />}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {question.grid && (
+        <div className="grid-table-wrap">
+          <table className="grid-table">
+            <thead>
+              <tr>
+                <th>행 / entry ID</th>
+                {question.grid.columns.map((column) => <th key={column.id}>{column.label}<br /><small>{column.id}</small></th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {question.grid.rows.map((row) => (
+                <tr key={row.id}>
+                  <th>{row.label}<br /><small>{row.entryId ?? row.id}</small></th>
+                  {question.grid?.columns.map((column) => <td key={column.id}>선택</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="message">
+            행별 응답 {question.grid.requireResponsePerRow ? "필수" : "선택"}
+            {question.grid.limitOneResponsePerColumn ? " / 열당 하나만 선택" : ""}
+          </p>
+        </div>
+      )}
+
+      <RuleEditor question={question} rule={rule} onChange={onRuleChange} />
     </article>
   );
 }
 
-export function Workbench() {
-  const [url, setUrl] = useState<string>(SAMPLE_FORMS[0].url);
-  const [form, setForm] = useState<ImportedForm | null>(null);
-  const [rules, setRules] = useState<GenerationRule[]>([]);
-  const [responses, setResponses] = useState<GeneratedResponse[]>([]);
-  const [count, setCount] = useState(12);
-  const [seed, setSeed] = useState("formswarm-2026");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
-  const [activePreview, setActivePreview] = useState(0);
-
-  const phase: Phase = responses.length > 0 ? "preview" : form ? "rules" : "source";
-  const enabledRuleCount = rules.filter((rule) => rule.enabled).length;
-  const requiredCount = form?.questions.filter((question) => question.required).length ?? 0;
-  const optionCount = form?.questions.reduce((sum, question) => sum + question.options.length, 0) ?? 0;
-
-  const ruleMap = useMemo(
-    () => new Map(rules.map((rule) => [rule.questionId, rule])),
-    [rules],
-  );
-  const validationByResponse = useMemo(
-    () =>
-      new Map(
-        responses.map((response) => [
-          response.id,
-          form
-            ? validateGeneratedResponse(form, response)
-            : { valid: false, issues: [] },
-        ]),
-      ),
-    [form, responses],
-  );
-
-  async function importForm() {
-    setLoading(true);
-    setError(null);
-    setResponses([]);
-    try {
-      const response = await fetch("/api/forms/import", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ url }),
-      });
-      const payload = await response.json() as {
-        form?: ImportedForm;
-        error?: { message: string };
-      };
-      if (!response.ok || !payload.form) {
-        throw new Error(payload.error?.message ?? "폼을 가져오지 못했습니다.");
-      }
-      setForm(payload.form);
-      setRules(createDefaultRules(payload.form));
-      setExpandedSections(new Set(payload.form.sections.map((section) => section.id)));
-    } catch (caught) {
-      setForm(null);
-      setRules([]);
-      setError(caught instanceof Error ? caught.message : "폼을 가져오지 못했습니다.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function updateRule(nextRule: GenerationRule) {
-    setRules((current) =>
-      current.map((rule) => (rule.questionId === nextRule.questionId ? nextRule : rule)),
+function ContentView({ item }: { item: Exclude<FormItem, { kind: "question" }> }) {
+  if (item.kind === "section") {
+    return (
+      <article className="content-item">
+        <h3>{item.title || "제목 없는 섹션"}</h3>
+        {item.description && <p>{item.description}</p>}
+        <dl className="question-meta">
+          <dt>분류</dt><dd>섹션</dd>
+          <dt>item ID</dt><dd>{item.itemId}</dd>
+          <dt>다음 이동</dt><dd>{navigationLabel(item.navigation)}</dd>
+        </dl>
+      </article>
     );
-    setResponses([]);
   }
 
-  function generate() {
-    if (!form) return;
-    const generated = generateResponses({ form, rules, count, seed: seed.slice(0, 128) });
-    setResponses(generated);
-    setActivePreview(0);
-    requestAnimationFrame(() => {
-      document.getElementById("preview")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  }
-
-  function downloadPreview() {
-    if (!form || responses.length === 0) return;
-    const blob = new Blob(
-      [
-        JSON.stringify(
-          {
-            exportSchemaVersion: "1.0",
-            exportedAt: new Date().toISOString(),
-            generatorVersion: RESPONSE_GENERATOR_VERSION,
-            form,
-            rules,
-            seed,
-            responses,
-            validation: responses.map((response) => ({
-              responseId: response.id,
-              ...validationByResponse.get(response.id),
-            })),
-          },
-          null,
-          2,
-        ),
-      ],
-      { type: "application/json" },
+  if (item.kind === "text_block") {
+    return (
+      <article className="content-item">
+        <h3>{item.title || "제목 없는 설명"}</h3>
+        {item.description && <p>{item.description}</p>}
+        <dl className="question-meta"><dt>분류</dt><dd>제목 및 설명</dd><dt>item ID</dt><dd>{item.itemId}</dd></dl>
+      </article>
     );
-    const anchor = document.createElement("a");
-    anchor.href = URL.createObjectURL(blob);
-    anchor.download = `form-swarm-preview-${Date.now()}.json`;
-    anchor.click();
-    URL.revokeObjectURL(anchor.href);
   }
 
-  function toggleSection(sectionId: string) {
-    setExpandedSections((current) => {
-      const next = new Set(current);
-      if (next.has(sectionId)) next.delete(sectionId);
-      else next.add(sectionId);
-      return next;
-    });
+  if (item.kind === "image") {
+    return (
+      <article className="content-item">
+        <h3>{item.title || item.image.altText || "이미지"}</h3>
+        {item.description && <p>{item.description}</p>}
+        <dl className="question-meta"><dt>분류</dt><dd>이미지</dd><dt>item ID</dt><dd>{item.itemId}</dd><dt>이미지 ID</dt><dd>{item.image.sourceId}</dd></dl>
+        <ImageView image={item.image} />
+      </article>
+    );
   }
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <a className="brand" href="#top" aria-label="Form Swarm 홈">
-          <span className="brand-mark"><Braces size={18} /></span>
-          <span>Form<span>Swarm</span></span>
-        </a>
-        <nav className="flow" aria-label="작업 단계">
-          <Step index={1} label="링크" active={phase === "source"} complete={Boolean(form)} />
-          <ChevronRight className="flow-arrow" size={15} />
-          <Step index={2} label="규칙·생성" active={phase === "rules"} complete={responses.length > 0} />
-          <ChevronRight className="flow-arrow" size={15} />
-          <Step index={3} label="미리보기" active={phase === "preview"} complete={false} />
-        </nav>
-        <div className="top-actions">
-          <StatusPill phase={phase} />
-          <span className="lab-badge"><FlaskConical size={13} /> READ-ONLY LAB</span>
-        </div>
-      </header>
+    <article className="content-item">
+      <h3>{item.title || "동영상"}</h3>
+      {item.description && <p>{item.description}</p>}
+      <dl className="question-meta"><dt>분류</dt><dd>동영상</dd><dt>item ID</dt><dd>{item.itemId}</dd><dt>video ID</dt><dd>{item.video.videoId}</dd></dl>
+      <iframe
+        className="video-frame"
+        src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(item.video.videoId)}`}
+        title={item.title || "Google Forms 동영상"}
+        loading="lazy"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowFullScreen
+      />
+    </article>
+  );
+}
 
-      <main id="top">
-        <section className="hero">
-          <div className="hero-copy">
-            <span className="eyebrow"><Sparkles size={14} /> 공개 폼 구조 분석기</span>
-            <h1>링크 하나로,<br /><em>응답 설계</em>까지.</h1>
-            <p>
-              Google Forms 원본을 읽어 문항과 입력 ID를 분류하고,
-              유형별 생성 규칙을 바로 구성합니다.
-            </p>
+function needsAiText(question: FormQuestion): boolean {
+  if (question.type === "paragraph") return true;
+  if (question.type !== "short_text") return false;
+  const constraints = constraintsForQuestion(question);
+  if (
+    constraints.textKind !== "plain" ||
+    constraints.minValue !== undefined ||
+    constraints.maxValue !== undefined ||
+    constraints.excludedNumberRange
+  ) {
+    return false;
+  }
+  return !/이름|성명|전화|연락처|휴대폰|이메일|메일\s*주소|학번|사번|주소|우편|url|링크|나이|연령|숫자|수치|금액|생년월일|날짜|시간/i.test(
+    `${question.title} ${question.description ?? ""}`,
+  );
+}
+
+export function Workbench() {
+  const [url, setUrl] = useState("");
+  const [form, setForm] = useState<ImportedForm | null>(null);
+  const [rules, setRules] = useState<GenerationRule[]>([]);
+  const [responses, setResponses] = useState<GeneratedResponse[]>([]);
+  const [count, setCount] = useState(10);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [previewTab, setPreviewTab] = useState<"summary" | "individual">("summary");
+  const [submission, setSubmission] = useState<SubmissionProgress | null>(null);
+  const [manualTextQuestionIds, setManualTextQuestionIds] = useState<Set<string>>(new Set());
+  const busy = analyzing || generating || submitting;
+
+  const ruleMap = useMemo(() => new Map(rules.map((rule) => [rule.questionId, rule])), [rules]);
+  const validationResults = useMemo(
+    () => form ? responses.map((response) => validateGeneratedResponse(form, response)) : [],
+    [form, responses],
+  );
+  const allResponsesValid = validationResults.every((result) => result.valid);
+
+  async function analyzeForm(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!url.trim() || busy) return;
+    setAnalyzing(true);
+    setError(null);
+    setMessage(null);
+    setForm(null);
+    setRules([]);
+    setResponses([]);
+    setSubmission(null);
+    setManualTextQuestionIds(new Set());
+
+    try {
+      const result = await fetch("/api/forms/import", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: url.trim() }),
+      });
+      const payload = await result.json() as { form?: ImportedForm; error?: { message?: string } };
+      if (!result.ok || !payload.form) throw new Error(payload.error?.message ?? "폼을 분석하지 못했습니다.");
+      setForm(payload.form);
+      setRules(createDefaultRules(payload.form));
+      setMessage("분석 완료");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "폼을 분석하지 못했습니다.");
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  function updateRule(next: GenerationRule) {
+    const previous = rules.find((rule) => rule.questionId === next.questionId);
+    setRules((current) => current.map((rule) => rule.questionId === next.questionId ? next : rule));
+    if (
+      next.kind === "text" &&
+      previous?.kind === "text" &&
+      previous.samples.join("\n") !== next.samples.join("\n")
+    ) {
+      setManualTextQuestionIds((current) => new Set(current).add(next.questionId));
+    }
+    setResponses([]);
+    setSubmission(null);
+  }
+
+  async function rulesWithAiAnswers(requestedCount: number): Promise<GenerationRule[]> {
+    if (!form) return rules;
+    const textQuestions = form.questions.filter(needsAiText);
+    let nextRules = [...rules];
+
+    for (let index = 0; index < textQuestions.length; index += 1) {
+      const question = textQuestions[index];
+      const currentRule = nextRules.find((rule) => rule.questionId === question.id);
+      if (!currentRule || currentRule.kind !== "text" || !currentRule.enabled) continue;
+      if (manualTextQuestionIds.has(question.id)) continue;
+      setMessage(`주관식 문구 생성 중 (${index + 1}/${textQuestions.length})`);
+      const constraints = constraintsForQuestion(question);
+      const result = await fetch("/api/ai/generate-text", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          question: {
+            id: question.id,
+            type: question.type,
+            title: question.title,
+            description: question.description,
+            required: question.required,
+            ...(constraints.minLength ? { minLength: constraints.minLength } : {}),
+            ...(constraints.maxLength ? { maxLength: constraints.maxLength } : {}),
+          },
+          count: requestedCount,
+          existingAnswers: currentRule.samples.slice(0, 100),
+          locale: form.locale || "ko",
+        }),
+      });
+      const payload = await result.json() as { answers?: string[]; error?: { message?: string } };
+      if (!result.ok || !payload.answers?.length) {
+        throw new Error(payload.error?.message ?? `“${question.title}” 문구를 생성하지 못했습니다.`);
+      }
+      nextRules = nextRules.map((rule) => rule.questionId === question.id && rule.kind === "text"
+        ? { ...rule, mode: "sequence", samples: payload.answers! }
+        : rule);
+    }
+
+    return nextRules;
+  }
+
+  async function generate() {
+    if (!form || busy) return;
+    const requestedCount = Math.max(1, Math.min(100, Math.floor(count || 1)));
+    setCount(requestedCount);
+    setGenerating(true);
+    setError(null);
+    setMessage("응답 생성 중");
+    setResponses([]);
+    setSubmission(null);
+
+    try {
+      const nextRules = await rulesWithAiAnswers(requestedCount);
+      const seed = `${form.source.publicId}:${Date.now()}:${crypto.randomUUID()}`;
+      const generated = generateResponses({ form, rules: nextRules, count: requestedCount, seed });
+      setRules(nextRules);
+      setResponses(generated);
+      setPreviewTab("summary");
+      setMessage(`${generated.length}개 응답 생성 완료`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "응답을 생성하지 못했습니다.");
+      setMessage(null);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function submitSequentially() {
+    if (!form || responses.length === 0 || busy) return;
+    if (!window.confirm(`${responses.length}개 응답을 실제 Google Forms에 순차 제출합니다. 계속할까요?`)) return;
+
+    setSubmitting(true);
+    setError(null);
+    setMessage("실제 제출 중");
+    let accepted = 0;
+    let failed = 0;
+    setSubmission({ done: 0, accepted: 0, failed: 0, error: null });
+
+    for (let index = 0; index < responses.length; index += 1) {
+      try {
+        const result = await fetch("/api/forms/submit", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ url: form.source.canonicalUrl, response: responses[index] }),
+        });
+        const payload = await result.json() as { accepted?: boolean; error?: { message?: string } };
+        if (!result.ok || !payload.accepted) throw new Error(payload.error?.message ?? "응답 제출이 거부되었습니다.");
+        accepted += 1;
+        setSubmission({ done: index + 1, accepted, failed, error: null });
+      } catch (caught) {
+        failed += 1;
+        const reason = caught instanceof Error ? caught.message : "응답을 제출하지 못했습니다.";
+        setSubmission({ done: index + 1, accepted, failed, error: reason });
+        setError(`${index + 1}번째 응답에서 제출을 중단했습니다: ${reason}`);
+        setMessage(null);
+        break;
+      }
+    }
+
+    if (failed === 0) setMessage(`${accepted}개 응답 제출 완료`);
+    setSubmitting(false);
+  }
+
+  const itemCount = form?.items?.length ?? form?.questions.length ?? 0;
+  const optionCount = form?.questions.reduce((sum, question) => sum + question.options.length, 0) ?? 0;
+  const entryCount = form?.questions.reduce((sum, question) => sum + question.entryIds.length, 0) ?? 0;
+  const skippedItems = form?.diagnostics.skippedItems ?? [];
+
+  return (
+    <main className="workbench">
+      <form className="import-form" onSubmit={analyzeForm}>
+        <label className="sr-only" htmlFor="form-url">Google Forms 링크</label>
+        <input
+          id="form-url"
+          type="url"
+          value={url}
+          onChange={(event) => setUrl(event.target.value)}
+          placeholder="Google Forms 링크"
+          maxLength={2_048}
+          disabled={busy}
+          required
+        />
+        <button type="submit" disabled={busy}>{analyzing ? "분석 중" : "검색"}</button>
+      </form>
+
+      {error && <p className="message error" role="alert">{error}</p>}
+      {message && <p className="message success" role="status">{message}</p>}
+
+      {form && (
+        <section className="analysis" aria-label="Google Forms 분석 결과">
+          <div className="form-heading">
+            <h1>{form.title || "제목 없는 설문지"}</h1>
+            {form.description && <p>{form.description}</p>}
+            <div className="form-counts">
+              <span>항목 {itemCount}</span>
+              <span>문항 {form.questions.length}</span>
+              <span>섹션 {form.sections.length}</span>
+              <span>선택지 {optionCount}</span>
+              <span>entry ID {entryCount}</span>
+              <span>제외 {skippedItems.length}</span>
+            </div>
+            <dl className="question-meta">
+              <dt>폼 ID</dt><dd>{form.source.publicId}</dd>
+              <dt>원본 URL</dt><dd><a href={form.source.canonicalUrl} target="_blank" rel="noreferrer">{form.source.canonicalUrl}</a></dd>
+              <dt>언어</dt><dd>{form.locale}</dd>
+              <dt>파서</dt><dd>{form.parserVersion} / schema {form.schemaVersion}</dd>
+              {form.submission?.actionUrl && <><dt>제출 URL</dt><dd>{form.submission.actionUrl}</dd></>}
+              {form.submission?.pageHistory && <><dt>pageHistory</dt><dd>{form.submission.pageHistory}</dd></>}
+            </dl>
           </div>
-          <div className="source-panel">
-            <div className="panel-label"><Link2 size={15} /> GOOGLE FORMS URL</div>
-            <div className={`url-box ${error ? "has-error" : ""}`}>
-              <Link2 size={18} />
-              <input
-                aria-label="Google Forms 링크"
-                value={url}
-                maxLength={2_048}
-                onChange={(event) => setUrl(event.target.value)}
-                onKeyDown={(event) => { if (event.key === "Enter") void importForm(); }}
-                placeholder="https://docs.google.com/forms/d/e/.../viewform"
-              />
-              <button onClick={() => void importForm()} disabled={loading || !url.trim()}>
-                {loading ? <LoaderCircle className="spin" size={17} /> : <PanelTop size={17} />}
-                {loading ? "분석 중" : "폼 분석"}
-                {!loading && <ArrowRight size={16} />}
+
+          <div className="section-block">
+            <div className="section-heading">
+              <h2>분석 결과</h2>
+              <p>폼에 나타난 순서대로 문항, 섹션, 설명, 이미지, 동영상을 분류했습니다.</p>
+            </div>
+            <fieldset className="item-list analysis-fields" disabled={busy}>
+              {form.items?.map((item) => item.kind === "question" ? (
+                <QuestionView
+                  key={`${item.kind}:${item.id}`}
+                  question={item}
+                  rule={ruleMap.get(item.id)}
+                  onRuleChange={updateRule}
+                />
+              ) : (
+                <ContentView key={`${item.kind}:${item.id}`} item={item} />
+              )) ?? form.questions.map((question) => (
+                <QuestionView
+                  key={question.id}
+                  question={question}
+                  rule={ruleMap.get(question.id)}
+                  onRuleChange={updateRule}
+                />
+              ))}
+            </fieldset>
+          </div>
+
+          {skippedItems.length > 0 && (
+            <div className="section-block">
+              <div className="section-heading"><h2>제외된 항목</h2></div>
+              <div className="item-list">
+                {skippedItems.map((item) => (
+                  <article className="content-item" key={item.itemId}>
+                    <h3>{item.title || "파일 업로드"}</h3>
+                    <dl className="question-meta">
+                      <dt>분류</dt><dd>파일 업로드 (지원 제외)</dd>
+                      <dt>item ID</dt><dd>{item.itemId}</dd>
+                      <dt>원본 유형</dt><dd>{item.rawType}</dd>
+                    </dl>
+                  </article>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {form.diagnostics.warnings.length > 0 && (
+            <div className="section-block">
+              <div className="section-heading"><h2>분석 경고</h2></div>
+              {form.diagnostics.warnings.map((warning) => <p className="message" key={warning}>{warning}</p>)}
+            </div>
+          )}
+
+          <section className="generation-panel">
+            <div className="panel-heading">
+              <div><h2>가상 응답 생성</h2><p>주관식 문구는 충남대 API Gateway로 문항을 분석해 생성합니다.</p></div>
+            </div>
+            <div className="generation-controls">
+              <label className="field">
+                생성 개수
+                <input type="number" min={1} max={100} value={count} disabled={busy} onChange={(event) => setCount(Number(event.target.value))} />
+              </label>
+              <button className="primary-button" type="button" disabled={busy} onClick={() => void generate()}>
+                {generating ? "생성 중" : "생성"}
               </button>
             </div>
-            {error && <p className="error-message"><AlertTriangle size={14} /> {error}</p>}
-            <div className="sample-row">
-              <span>테스트 폼</span>
-              {SAMPLE_FORMS.map((sample, index) => (
-                <button
-                  key={sample.url}
-                  className={url === sample.url ? "is-selected" : ""}
-                  onClick={() => { setUrl(sample.url); setError(null); }}
-                >
-                  <span>{index + 1}</span>
-                  <strong>{sample.label}</strong>
-                  <small>{sample.detail}</small>
-                </button>
-              ))}
-            </div>
-            <div className="trust-line">
-              <span><ShieldCheck size={14} /> 허용된 Google 도메인만 접근</span>
-              <span><LockKeyhole size={14} /> 이 단계에서는 응답을 전송하지 않음</span>
-            </div>
-          </div>
-        </section>
-
-        {!form && (
-          <section className="empty-stage" aria-label="분석 대기">
-            <div className="architecture-strip">
-              <span><Link2 /> 링크 검증</span><ArrowRight />
-              <span><Braces /> 내부 데이터 추출</span><ArrowRight />
-              <span><Layers3 /> 문항 정규화</span><ArrowRight />
-              <span><Settings2 /> 규칙 자동 구성</span><ArrowRight />
-              <span><Table2 /> 안전한 미리보기</span>
-            </div>
           </section>
-        )}
 
-        {form && (
-          <>
-            <section className="form-summary">
-              <div className="summary-title">
-                <span className="google-form-icon"><span /><span /><span /></span>
-                <div>
-                  <div className="summary-kicker"><CheckCircle2 size={14} /> 구조 분석 완료</div>
-                  <h2>{form.title}</h2>
-                  <p>{form.description ?? "설명 없음"}</p>
-                </div>
-                <a href={form.source.canonicalUrl} target="_blank" rel="noreferrer">
-                  원본 열기 <ArrowRight size={14} />
-                </a>
+          {responses.length > 0 && (
+            <section className="preview-panel">
+              <div className="panel-heading">
+                <div><h2>미리보기</h2><p>{responses.length}개 응답</p></div>
               </div>
-              <div className="metrics">
-                <Metric label="페이지" value={form.sections.length} detail="page break 기준" />
-                <Metric label="문항" value={form.questions.length} detail={`${requiredCount}개 필수`} />
-                <Metric label="입력 ID" value={form.questions.reduce((sum, q) => sum + q.entryIds.length, 0)} detail="entry binding" />
-                <Metric label="선택지" value={optionCount} detail="기타 포함" />
+              <div className="preview-tabs" role="tablist" aria-label="미리보기 방식">
+                <button type="button" role="tab" aria-selected={previewTab === "summary"} onClick={() => setPreviewTab("summary")}>요약</button>
+                <button type="button" role="tab" aria-selected={previewTab === "individual"} onClick={() => setPreviewTab("individual")}>개별</button>
               </div>
-            </section>
 
-            <section className="workspace-grid">
-              <div className="rules-panel">
-                <div className="section-heading">
-                  <div>
-                    <span className="heading-index">02</span>
-                    <div><h2>생성 규칙</h2><p>문항 유형을 기준으로 기본값을 구성했습니다.</p></div>
-                  </div>
-                  <span className="rule-count">{enabledRuleCount}/{form.questions.length} 활성</span>
+              {previewTab === "summary" ? (
+                <div className="summary-list">
+                  {form.questions.map((question) => <ResponseSummaryCard key={question.id} question={question} responses={responses} />)}
                 </div>
-
-                <div className="diagnostic-banner">
-                  <Info size={16} />
-                  <div>
-                    <strong>구조 기반 기본 규칙입니다.</strong>
-                    <span>후속 문항·상호배타 선택·개인정보 관계는 사용자가 확인해야 합니다.</span>
-                    {form.diagnostics.warnings.map((warning) => (
-                      <span key={warning}>• {warning}</span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="sections-list">
-                  {form.sections.map((section) => {
-                    const expanded = expandedSections.has(section.id);
-                    const sectionQuestions = form.questions.filter((question) => question.sectionId === section.id);
-                    return (
-                      <div className="section-group" key={section.id}>
-                        <button className="section-toggle" onClick={() => toggleSection(section.id)}>
-                          <span className="section-number">{String(section.index + 1).padStart(2, "0")}</span>
-                          <span><strong>{section.title}</strong><small>{sectionQuestions.length}개 문항</small></span>
-                          {expanded ? <ChevronDown size={17} /> : <ChevronRight size={17} />}
-                        </button>
-                        {expanded && sectionQuestions.length > 0 && (
-                          <div className="question-list">
-                            {sectionQuestions.map((question) => {
-                              const rule = ruleMap.get(question.id);
-                              return rule ? (
-                                <RuleEditor key={question.id} question={question} rule={rule} onChange={updateRule} />
-                              ) : null;
-                            })}
+              ) : (
+                <div className="individual-list">
+                  {responses.map((response, index) => (
+                    <details className="individual-response" key={response.id} open={index === 0}>
+                      <summary>응답 {index + 1}{validationResults[index]?.valid ? "" : " (검토 필요)"}</summary>
+                      <dl className="answer-list">
+                        {form.questions.map((question) => (
+                          <div key={question.id} className="answer-pair">
+                            <dt>{question.title}</dt>
+                            <dd>{answerLabel(response.answers[question.id])}</dd>
                           </div>
-                        )}
-                        {expanded && sectionQuestions.length === 0 && (
-                          <div className="cover-page-note"><PanelTop size={16} /> 문항 없는 표지 페이지</div>
-                        )}
-                      </div>
-                    );
-                  })}
+                        ))}
+                      </dl>
+                    </details>
+                  ))}
                 </div>
-              </div>
-
-              <aside className="generation-panel">
-                <div className="sticky-card">
-                  <div className="section-heading compact">
-                    <div><span className="heading-index">03</span><div><h2>가상 응답 생성</h2><p>동일한 시드는 동일한 결과를 만듭니다.</p></div></div>
-                  </div>
-                  <label className="field-label">
-                    <span>생성 개수</span>
-                    <div className="number-field">
-                      <input type="number" min={1} max={500} value={count} onChange={(event) => setCount(Number(event.target.value))} />
-                      <span>개</span>
-                    </div>
-                  </label>
-                  <label className="field-label">
-                    <span>랜덤 시드</span>
-                    <div className="seed-field">
-                      <input maxLength={128} value={seed} onChange={(event) => setSeed(event.target.value)} />
-                      <button aria-label="새 시드" onClick={() => setSeed(`formswarm-${Date.now().toString(36)}`)}><RefreshCw size={15} /></button>
-                    </div>
-                  </label>
-
-                  <div className="generation-recap">
-                    <span><CheckCircle2 size={14} /> 활성 규칙 <strong>{enabledRuleCount}</strong></span>
-                    <span><CircleDashed size={14} /> 제외 문항 <strong>{form.questions.length - enabledRuleCount}</strong></span>
-                  </div>
-
-                  <button className="generate-button" onClick={generate}>
-                    <Play size={17} fill="currentColor" />
-                    {count}개 미리보기 생성
-                  </button>
-                  <p className="dry-run-note"><ShieldCheck size={14} /> Dry run · Google에 전송되지 않습니다.</p>
-
-                  <div className="submission-boundary">
-                    <div><LockKeyhole size={16} /><span><strong>실제 제출 잠금</strong><small>소유권 확인 + 전용 테스트 폼 필요</small></span></div>
-                    <button disabled>제출 큐 연결</button>
-                  </div>
-                </div>
-              </aside>
+              )}
             </section>
+          )}
 
-            {responses.length > 0 && (
-              <section className="preview-section" id="preview">
-                <div className="section-heading preview-heading">
-                  <div><span className="heading-index">04</span><div><h2>응답 미리보기</h2><p>{responses.length}개 결과 중 선택한 1개를 상세 검토합니다.</p></div></div>
-                  <button className="export-button" onClick={downloadPreview}><Download size={15} /> JSON 내보내기</button>
-                </div>
-                <div className="preview-layout">
-                  <div className="response-rail" aria-label="생성 응답 목록">
-                    {responses.map((response) => (
-                      <button
-                        key={response.id}
-                        className={activePreview === response.index ? "is-active" : ""}
-                        onClick={() => setActivePreview(response.index)}
-                      >
-                        <span>#{String(response.index + 1).padStart(2, "0")}</span>
-                        <code>{response.id}</code>
-                        <ChevronRight size={14} />
-                      </button>
-                    ))}
+          {responses.length > 0 && (
+            <section className="submission-panel">
+              <div className="panel-heading">
+                <div><h2>실제 제출</h2><p>생성된 응답을 한 개씩 순서대로 Google Forms에 제출합니다.</p></div>
+              </div>
+              {!allResponsesValid && <p className="message error">유효하지 않은 응답이 있어 제출할 수 없습니다.</p>}
+              <button
+                className="submit-button"
+                type="button"
+                disabled={busy || !allResponsesValid}
+                onClick={() => void submitSequentially()}
+              >
+                {submitting ? "제출 중" : `${responses.length}개 순차 제출`}
+              </button>
+              {submission && (
+                <>
+                  <div className="submission-progress" aria-label={`${submission.done}/${responses.length} 제출 처리`}>
+                    <i style={{ "--chart-value": `${(submission.done / responses.length) * 100}%` } as React.CSSProperties} />
                   </div>
-                  <div className="answer-table">
-                    <div className="answer-table-head">
-                      <div><Table2 size={16} /><strong>응답 #{String(activePreview + 1).padStart(2, "0")}</strong></div>
-                      {(() => {
-                        const validation = validationByResponse.get(
-                          responses[activePreview]?.id ?? "",
-                        );
-                        return validation?.valid ? (
-                          <span><span className="status-dot" /> 구조 검증 통과</span>
-                        ) : (
-                          <span className="is-review"><AlertTriangle size={12} /> 검토 필요 · {validation?.issues.length ?? 0}</span>
-                        );
-                      })()}
-                    </div>
-                    {form.questions.map((question) => (
-                      <div className="answer-row" key={question.id}>
-                        <div className="answer-question"><QuestionIcon type={question.type} /><span><small>{TYPE_LABEL[question.type]}</small><strong>{question.title}</strong></span></div>
-                        <div className="answer-value">{answerLabel(responses[activePreview]?.answers[question.id])}</div>
-                      </div>
-                    ))}
+                  <div className="submission-results">
+                    <span>처리 {submission.done}/{responses.length}</span>
+                    <span>성공 {submission.accepted}</span>
+                    <span>실패 {submission.failed}</span>
                   </div>
-                </div>
-              </section>
-            )}
-          </>
-        )}
-      </main>
-      <footer>
-        <div><Braces size={15} /> FormSwarm <span>Schema-first response lab</span></div>
-        <span>parser {form?.parserVersion ?? "대기 중"}</span>
-      </footer>
-    </div>
+                  {submission.error && <p className="message error">{submission.error}</p>}
+                </>
+              )}
+            </section>
+          )}
+        </section>
+      )}
+    </main>
   );
 }

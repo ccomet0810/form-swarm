@@ -4,6 +4,7 @@ import { importGoogleForm } from "../lib/application/import-google-form";
 const LIVE = process.env.LIVE_GOOGLE_FORMS_TEST === "1";
 const FORM_ONE = "https://docs.google.com/forms/d/e/1FAIpQLSeoFC1jW6yqDNDx-RbAam_GfT7kBgrKwVDMFa9-wUEfFlDTdA/viewform";
 const FORM_TWO = "https://docs.google.com/forms/d/e/1FAIpQLSf4Wnw-bPB2CLK1Aj-YBXS1kZoZFiUEzWNjRmKNZjali6c85g/viewform";
+const ADVANCED_FORM = "https://docs.google.com/forms/d/e/1FAIpQLSeFJy4uwdTHLefBthkJlvn2HfavCyZpQ_lG2ySa4YjHA39a-A/viewform";
 
 describe.skipIf(!LIVE)("read-only live Google Forms fixtures", () => {
   it("parses the onboarding form including grid and rating", async () => {
@@ -28,5 +29,17 @@ describe.skipIf(!LIVE)("read-only live Google Forms fixtures", () => {
     expect(form.questions.filter((question) => question.type === "checkboxes")).toHaveLength(5);
     expect(form.questions.some((question) => question.options.some((option) => option.isOther))).toBe(true);
     expect(form.questions.flatMap((question) => question.entryIds)).toContain("1766287717");
+  }, 20_000);
+
+  it("parses every supported type and media item in the advanced form", async () => {
+    const form = await importGoogleForm(ADVANCED_FORM);
+    expect(form.sections).toHaveLength(4);
+    expect(form.questions).toHaveLength(23);
+    expect(form.items).toHaveLength(29);
+    expect(form.diagnostics.unsupportedQuestionCount).toBe(0);
+    expect(form.questions.some((question) => question.type === "grid_checkbox")).toBe(true);
+    expect(form.questions.flatMap((question) => question.options).filter((option) => option.image)).toHaveLength(2);
+    expect(form.questions.flatMap((question) => question.images ?? [])).toHaveLength(1);
+    expect(form.items?.filter((item) => item.kind === "image")).toHaveLength(1);
   }, 20_000);
 });

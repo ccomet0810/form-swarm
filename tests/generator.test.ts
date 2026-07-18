@@ -58,7 +58,9 @@ describe("seeded response generator", () => {
       expect(response.answers.q2).toBeInstanceOf(Array);
       expect((response.answers.q2 as string[]).length).toBeGreaterThanOrEqual(1);
       expect((response.answers.q2 as string[]).length).toBeLessThanOrEqual(3);
-      expect(response.answers.q3).toBeTypeOf("string");
+      expect(
+        response.answers.q3 === undefined || typeof response.answers.q3 === "string",
+      ).toBe(true);
     }
   });
 
