@@ -43,7 +43,7 @@ function PieChart({ values }: { values: SummaryValue[] }) {
 
   return (
     <div className="pie-layout">
-      <div className="pie-chart" style={{ background }} aria-label="응답 비율 원그래프" />
+      <div className="pie-chart" style={{ background }} aria-hidden="true" />
       <div className="chart-legend">
         {values.map((value, index) => (
           <div key={value.label}>
