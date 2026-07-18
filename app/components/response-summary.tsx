@@ -9,14 +9,14 @@ import {
 } from "../../lib/summary/aggregate";
 
 const CHART_COLORS = [
-  "#3367d6",
-  "#d93025",
-  "#f9ab00",
-  "#188038",
-  "#9334e6",
-  "#12b5cb",
-  "#e8710a",
-  "#5f6368",
+  "#0a0a0a",
+  "#333333",
+  "#555555",
+  "#777777",
+  "#999999",
+  "#b3b3b3",
+  "#cccccc",
+  "#e0e0e0",
 ];
 
 function valueStyle(value: number, max: number): CSSProperties {

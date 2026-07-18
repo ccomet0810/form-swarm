@@ -19,10 +19,11 @@ test("server-renders the minimal form analyzer", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
+  const body = html.match(/<body>([\s\S]*?)<\/body>/)?.[1] ?? html;
   assert.match(html, /Google Forms 링크/);
   assert.match(html, /분석/);
-  assert.match(html, /og-functional\.png/);
-  assert.doesNotMatch(html, /FormSwarm|링크 하나로|READ-ONLY LAB/);
-  assert.doesNotMatch(html, /온보딩 경험 평가|손글씨 폰트 설문|랜덤 시드/);
-  assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
+  assert.match(html, /og-brutalist-v2\.png/);
+  assert.doesNotMatch(body, /FormSwarm|링크 하나로|READ-ONLY LAB/);
+  assert.doesNotMatch(body, /온보딩 경험 평가|손글씨 폰트 설문|랜덤 시드/);
+  assert.doesNotMatch(body, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });

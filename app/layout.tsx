@@ -9,17 +9,17 @@ export const metadata: Metadata = {
     title: "Google Forms 응답 테스트",
     description: "Google Forms 구조 분석, 가상 응답 생성 및 제출 테스트 도구",
     images: [{
-      url: "/og-functional.png",
+      url: "/og-brutalist-v2.png",
       width: 1_672,
       height: 941,
-      alt: "설문 문항을 응답 그래프로 변환하는 기능 흐름",
+      alt: "FormSwarm 흑백 브루탈리즘 분석 및 응답 미리보기 화면",
     }],
   },
   twitter: {
     card: "summary_large_image",
     title: "Google Forms 응답 테스트",
     description: "Google Forms 구조 분석, 가상 응답 생성 및 제출 테스트 도구",
-    images: ["/og-functional.png"],
+    images: ["/og-brutalist-v2.png"],
   },
 };
 
