@@ -433,6 +433,10 @@ summary:focus-visible {
 }
 
 .media-fallback {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
   width: fit-content;
   max-width: 100%;
   margin: 13px 0 0;
@@ -441,6 +445,17 @@ summary:focus-visible {
   color: var(--muted);
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+
+.media-fallback button {
+  min-height: 30px;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  font-size: 12px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .video-frame {

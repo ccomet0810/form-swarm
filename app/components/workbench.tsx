@@ -76,7 +76,12 @@ function ImageView({ image, className = "media-image" }: { image: FormImageRef; 
     return <p className="media-fallback">이미지 ID {image.sourceId} · 표시 URL 없음</p>;
   }
   if (failedUrl === image.url) {
-    return <p className="media-fallback">이미지를 불러오지 못했습니다. 이미지 ID {image.sourceId}</p>;
+    return (
+      <div className="media-fallback" role="status">
+        <span>이미지를 불러오지 못했습니다. 이미지 ID {image.sourceId}</span>
+        <button type="button" onClick={() => setFailedUrl(null)}>다시 시도</button>
+      </div>
+    );
   }
   return (
     <img
