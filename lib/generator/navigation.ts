@@ -65,9 +65,14 @@ export function destinationForChoice(
   answer: unknown,
 ): string | null {
   if (typeof answer !== "string") return null;
-  const matchingOption = question.options.find(
+  const regularOption = question.options.find(
     (option) => option.label === answer || option.value === answer,
   );
+  const matchingOption =
+    regularOption ??
+    (answer.trim()
+      ? question.options.find((option) => option.isOther)
+      : undefined);
   const direct = matchingOption ? optionDestination(matchingOption) : null;
   if (direct) return direct;
 

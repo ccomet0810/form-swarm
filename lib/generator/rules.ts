@@ -2,22 +2,24 @@ import type {
   FormQuestion,
   GenerationRule,
   ImportedForm,
+  OtherAnswerGenerationRule,
 } from "../domain/form-schema";
 import { constraintsForQuestion } from "./constraints";
 
-function textSamples(question: FormQuestion): string[] {
-  const text = `${question.title} ${question.description ?? ""}`;
-  if (/전화|연락처|휴대폰/.test(text)) {
-    return ["010-0000-0001", "010-0000-0002", "010-0000-0003"];
-  }
-  if (question.type === "paragraph") {
-    return [
-      "전반적으로 만족했으며 안내가 조금 더 구체적이면 좋겠습니다.",
-      "사용 과정은 이해하기 쉬웠고 결과도 기대한 수준이었습니다.",
-      "핵심 단계는 좋았지만 초반 설명을 보강하면 더 편리할 것 같습니다.",
-    ];
-  }
-  return ["샘플 응답 A", "샘플 응답 B", "샘플 응답 C"];
+function textSamples(): string[] {
+  return [];
+}
+
+function otherRule(question: FormQuestion): OtherAnswerGenerationRule | undefined {
+  if (!question.options.some((option) => option.isOther)) return undefined;
+  return {
+    // Generating an opaque placeholder as an Other response is surprising and
+    // produces low-quality form data. The user explicitly enables this after
+    // supplying the texts that may be sampled.
+    enabled: false,
+    probability: 0.15,
+    samples: [],
+  };
 }
 
 export function defaultRuleForQuestion(question: FormQuestion): GenerationRule {
@@ -32,7 +34,7 @@ export function defaultRuleForQuestion(question: FormQuestion): GenerationRule {
       enabled: true,
       kind: "text",
       mode: "sample_pool",
-      samples: textSamples(question),
+      samples: textSamples(),
     };
   }
 
@@ -52,8 +54,9 @@ export function defaultRuleForQuestion(question: FormQuestion): GenerationRule {
       ),
       maxSelections: Math.min(
         constraints.maxSelections ?? 3,
-        selectableCount + (question.options.some((option) => option.isOther) ? 1 : 0),
+        selectableCount,
       ),
+      other: otherRule(question),
     };
   }
 
@@ -80,6 +83,7 @@ export function defaultRuleForQuestion(question: FormQuestion): GenerationRule {
         question.type === "scale" || question.type === "rating"
           ? "middle_weighted"
           : "uniform",
+      other: otherRule(question),
     };
   }
 

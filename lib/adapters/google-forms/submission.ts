@@ -236,8 +236,19 @@ function appendOtherValue(
   entryId: string,
   value: string,
 ): void {
+  // Google uses one ordinary entry value as the Other sentinel, followed by
+  // one companion text field. This is the same shape for radio and checkbox
+  // questions; checkbox regular values remain repeated entry.<id> fields.
   params.append(`entry.${entryId}`, "__other_option__");
   params.set(`entry.${entryId}.other_option_response`, value);
+}
+
+function regularOptionForAnswer(question: FormQuestion, answer: string) {
+  return question.options.find(
+    (option) =>
+      !option.isOther &&
+      (option.label === answer || option.value === answer),
+  );
 }
 
 function appendChoiceAnswer(
@@ -246,13 +257,9 @@ function appendChoiceAnswer(
   entryId: string,
   answer: string,
 ): void {
-  const regularLabels = new Set(
-    question.options
-      .filter((option) => !option.isOther)
-      .map((option) => option.label),
-  );
-  if (regularLabels.has(answer)) {
-    params.append(`entry.${entryId}`, answer);
+  const regularOption = regularOptionForAnswer(question, answer);
+  if (regularOption) {
+    params.append(`entry.${entryId}`, regularOption.label);
     return;
   }
   if (question.options.some((option) => option.isOther)) {
@@ -260,6 +267,27 @@ function appendChoiceAnswer(
     return;
   }
   params.append(`entry.${entryId}`, answer);
+}
+
+function appendCheckboxAnswer(
+  params: URLSearchParams,
+  question: FormQuestion,
+  entryId: string,
+  answers: string[],
+): void {
+  const acceptsOther = question.options.some((option) => option.isOther);
+  let appendedOther = false;
+  for (const answer of answers) {
+    const regularOption = regularOptionForAnswer(question, answer);
+    if (regularOption) {
+      params.append(`entry.${entryId}`, regularOption.label);
+      continue;
+    }
+    if (acceptsOther && !appendedOther) {
+      appendOtherValue(params, entryId, answer);
+      appendedOther = true;
+    }
+  }
 }
 
 function recordFromAnswer(answer: unknown): Record<string, unknown> | null {
@@ -430,11 +458,12 @@ export function buildGoogleFormResponseParams(input: {
     const entryId = question.entryIds[0];
     if (!entryId) continue;
     if (Array.isArray(answer)) {
-      for (const value of answer) {
-        if (typeof value === "string") {
-          appendChoiceAnswer(params, question, entryId, value);
-        }
-      }
+      appendCheckboxAnswer(
+        params,
+        question,
+        entryId,
+        answer.filter((value): value is string => typeof value === "string"),
+      );
     } else if (typeof answer === "string") {
       appendChoiceAnswer(params, question, entryId, answer);
     }

@@ -12,7 +12,7 @@ import {
 } from "./constraints";
 import { resolveResponseNavigation } from "./navigation";
 
-export const RESPONSE_GENERATOR_VERSION = "deterministic-preview/2026-07-v2";
+export const RESPONSE_GENERATOR_VERSION = "deterministic-preview/2026-07-v3";
 
 export interface GeneratedResponseWithNavigation extends GeneratedResponse {
   visitedSectionIds: string[];
@@ -75,8 +75,41 @@ function shuffled<T>(random: () => number, values: T[]): T[] {
   return copy;
 }
 
-function customOtherAnswer(responseIndex: number): string {
-  return `기타 응답 ${responseIndex + 1}`;
+function usableOtherSamples(
+  question: FormQuestion,
+  rule: GeneratorRule,
+): string[] {
+  if (
+    (rule.kind !== "choice" && rule.kind !== "checkboxes") ||
+    !rule.other?.enabled ||
+    !question.options.some((option) => option.isOther)
+  ) {
+    return [];
+  }
+
+  const regularValues = new Set(
+    question.options
+      .filter((option) => !option.isOther)
+      .flatMap((option) => [option.label, option.value]),
+  );
+  return [...new Set(
+    rule.other.samples
+      .map((sample) => sample.trim())
+      .filter(
+        (sample) =>
+          sample.length > 0 &&
+          sample.length <= 20_000 &&
+          !regularValues.has(sample),
+      ),
+  )];
+}
+
+function otherProbability(rule: GeneratorRule): number {
+  if (rule.kind !== "choice" && rule.kind !== "checkboxes") return 0;
+  const probability = rule.other?.probability;
+  return Number.isFinite(probability)
+    ? Math.max(0, Math.min(1, probability!))
+    : 0;
 }
 
 function numericTextAnswer(
@@ -213,26 +246,41 @@ function answerQuestion(
   }
 
   const regularOptions = question.options.filter((option) => !option.isOther);
-  const otherOption = question.options.find((option) => option.isOther);
+  const otherSamples = usableOtherSamples(question, rule);
 
   if (rule.kind === "choice") {
     if (rule.mode === "fixed") {
-      return (
-        regularOptions.find((option) => option.value === rule.fixedValue)?.label ??
-        regularOptions[0]?.label
+      const fixedOption = regularOptions.find(
+        (option) =>
+          option.value === rule.fixedValue || option.label === rule.fixedValue,
       );
+      if (fixedOption) return fixedOption.label;
+      if (rule.fixedValue && otherSamples.includes(rule.fixedValue)) {
+        return rule.fixedValue;
+      }
+      if (rule.fixedValue === "__other__" && otherSamples.length > 0) {
+        return pick(random, otherSamples);
+      }
+      return regularOptions[0]?.label ?? pick(random, otherSamples);
     }
-    if (otherOption && random() < 0.08) return customOtherAnswer(responseIndex);
+    if (
+      otherSamples.length > 0 &&
+      (regularOptions.length === 0 || random() < otherProbability(rule))
+    ) {
+      return pick(random, otherSamples);
+    }
     const option =
       rule.mode === "middle_weighted"
         ? pickMiddleWeighted(random, regularOptions)
         : pick(random, regularOptions);
-    return option?.label;
+    return option?.label ?? pick(random, otherSamples);
   }
 
   if (rule.kind === "checkboxes") {
     const constraints = constraintsForQuestion(question);
-    const totalOptions = regularOptions.length + (otherOption ? 1 : 0);
+    const canGenerateOther = otherSamples.length > 0;
+    const totalOptions = regularOptions.length + (canGenerateOther ? 1 : 0);
+    if (totalOptions === 0) return undefined;
     const requestedMin = Number.isFinite(rule.minSelections)
       ? Math.floor(rule.minSelections)
       : 0;
@@ -253,13 +301,23 @@ function answerQuestion(
       ),
       totalOptions,
     );
-    const pool = otherOption ? [...regularOptions, otherOption] : regularOptions;
-    const count = pool.length === 0 ? 0 : randomInt(random, min, max);
-    return shuffled(random, pool)
-      .slice(0, count)
-      .map((option) =>
-        option.isOther ? customOtherAnswer(responseIndex) : option.label,
-      );
+    const count = randomInt(random, min, max);
+    if (count === 0) return [];
+    const includeOther =
+      canGenerateOther &&
+      (count > regularOptions.length || random() < otherProbability(rule));
+    const regularCount = Math.min(
+      regularOptions.length,
+      count - (includeOther ? 1 : 0),
+    );
+    const selected = shuffled(random, regularOptions)
+      .slice(0, regularCount)
+      .map((option) => option.label);
+    if (includeOther) {
+      const customAnswer = pick(random, otherSamples);
+      if (customAnswer) selected.push(customAnswer);
+    }
+    return shuffled(random, selected);
   }
 
   if (rule.kind === "grid" && question.grid) {

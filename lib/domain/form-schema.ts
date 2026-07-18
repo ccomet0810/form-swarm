@@ -241,6 +241,19 @@ export interface GeneratedResponse {
   answers: Record<string, GeneratedAnswer>;
 }
 
+/**
+ * Controls generation for Google Forms' free-text "Other" choice.
+ *
+ * `probability` is the chance that Other participates in a generated answer.
+ * The text is sampled from `samples`; empty/duplicate values and values that
+ * collide with a regular option are ignored by the generator.
+ */
+export interface OtherAnswerGenerationRule {
+  enabled: boolean;
+  probability: number;
+  samples: string[];
+}
+
 export type GenerationRule =
   | {
       questionId: string;
@@ -255,6 +268,7 @@ export type GenerationRule =
       kind: "choice";
       mode: "uniform" | "middle_weighted" | "fixed";
       fixedValue?: string;
+      other?: OtherAnswerGenerationRule;
     }
   | {
       questionId: string;
@@ -262,6 +276,7 @@ export type GenerationRule =
       kind: "checkboxes";
       minSelections: number;
       maxSelections: number;
+      other?: OtherAnswerGenerationRule;
     }
   | {
       questionId: string;

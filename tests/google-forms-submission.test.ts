@@ -304,6 +304,28 @@ describe("Google Forms formResponse serialization", () => {
     `);
   });
 
+  it("emits one Other sentinel and the Google companion text field for checkboxes", () => {
+    const context = extractGoogleFormSubmissionContext(page);
+    const customResponse = {
+      ...response,
+      answers: {
+        ...response.answers,
+        // Validation rejects two custom values. The serializer still remains
+        // defensive and never emits an impossible second Other selection.
+        "q-checkbox": ["X", "직접 입력 1", "직접 입력 2"],
+      },
+    };
+    const params = buildGoogleFormResponseParams({
+      form,
+      response: customResponse,
+      context,
+    });
+
+    expect(params.getAll("entry.103")).toEqual(["X", "__other_option__"]);
+    expect(params.get("entry.103.other_option_response")).toBe("직접 입력 1");
+    expect(params.has("entry.103.other_response")).toBe(false);
+  });
+
   it("posts one encoded response and only accepts a confirmation page", async () => {
     const fetchImpl = vi.fn<typeof fetch>(async () =>
       new Response("<main>응답이 기록되었습니다.</main>", {

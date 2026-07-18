@@ -193,45 +193,6 @@ summary:focus-visible {
   white-space: pre-wrap;
 }
 
-.form-counts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px 20px;
-  margin-top: 18px;
-  padding: 10px 12px;
-  background: var(--text);
-  color: var(--surface);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.form-source-meta {
-  max-width: 900px;
-  margin-top: 14px !important;
-}
-
-.form-technical {
-  max-width: 900px;
-  margin-top: 12px;
-  border: 1px solid var(--text);
-  background: var(--soft);
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.form-technical summary {
-  width: fit-content;
-  min-height: 30px;
-  padding: 9px 11px;
-  color: var(--text);
-  font-weight: 800;
-}
-
-.form-technical .question-meta {
-  margin: 0;
-  border-width: 1px 0 0;
-}
-
 .result-layout {
   display: grid;
   grid-template-columns: 200px minmax(0, 1fr);
@@ -387,6 +348,18 @@ summary:focus-visible {
   white-space: pre-wrap;
 }
 
+.item-byline,
+.content-item > .item-byline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 7px 0 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
 .section-item {
   border-width: 3px;
   background: var(--text);
@@ -395,6 +368,10 @@ summary:focus-visible {
 
 .section-item > p {
   color: #d8d8d4;
+}
+
+.section-item > .item-byline {
+  color: var(--surface);
 }
 
 .section-item .question-meta {
@@ -478,6 +455,34 @@ summary:focus-visible {
 
 .question-meta a {
   overflow-wrap: anywhere;
+}
+
+.technical-details {
+  margin-top: 17px;
+  border: 1px solid var(--text);
+  background: var(--soft);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.technical-details summary {
+  min-height: 38px;
+  padding: 10px 12px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.technical-details[open] summary {
+  border-bottom: 1px solid var(--text);
+}
+
+.technical-details .question-meta {
+  margin: 0;
+  border: 0;
+}
+
+.section-item .technical-details {
+  background: var(--surface);
 }
 
 .media-image {
@@ -580,6 +585,10 @@ table {
   font-size: 12px;
 }
 
+.compact-rule-editor {
+  align-items: start;
+}
+
 .rule-heading {
   grid-column: 1 / -1;
   margin: 0;
@@ -608,11 +617,55 @@ table {
 .field textarea {
   min-height: 82px;
   padding: 8px 9px;
-  resize: vertical;
+  overflow-y: hidden;
+  resize: none;
 }
 
 .rule-editor .wide-field {
   grid-column: 1 / -1;
+}
+
+.rule-note,
+.field-note,
+.inline-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  line-height: 1.55;
+}
+
+.rule-note,
+.field-note {
+  color: var(--muted);
+}
+
+.inline-error {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.other-answer-editor {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px 12px;
+  margin-top: 3px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.percent-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px;
+}
+
+.percent-input > span {
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--text);
+  border-left: 0;
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 800;
 }
 
 .generation-panel,
@@ -639,9 +692,36 @@ table {
 
 .generation-controls {
   display: grid;
-  grid-template-columns: 150px 150px;
+  grid-template-columns: minmax(110px, 150px) 150px;
   gap: 10px;
-  align-items: end;
+}
+
+.generation-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.generation-controls input,
+.generation-controls button {
+  width: 100%;
+  height: 46px;
+  min-height: 46px;
+}
+
+.generation-controls input {
+  padding: 0 11px;
+  border: 2px solid var(--text);
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.generation-status {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .preview-tabs {
@@ -788,11 +868,9 @@ table {
 }
 
 .chart-legend b {
-  overflow: hidden;
   font-size: 12px;
   font-weight: 400;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .chart-legend small {
@@ -812,9 +890,7 @@ table {
 }
 
 .horizontal-row > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .horizontal-row > div {
@@ -1141,10 +1217,6 @@ table {
     box-shadow: var(--shadow-sm);
   }
 
-  .form-counts {
-    gap: 5px 13px;
-  }
-
   .question-item,
   .content-item {
     padding: 16px;
@@ -1155,6 +1227,7 @@ table {
   }
 
   .rule-editor,
+  .other-answer-editor,
   .generation-controls {
     grid-template-columns: 1fr;
   }

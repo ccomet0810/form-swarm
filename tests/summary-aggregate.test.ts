@@ -53,6 +53,28 @@ describe("Google-style response summaries", () => {
     });
   });
 
+  it("groups matching free-text Other answers into pie slices", () => {
+    const summary = summarizeQuestion(
+      question({
+        options: [
+          { label: "A", value: "A", isOther: false },
+          { label: "기타", value: "__other__", isOther: true },
+        ],
+      }),
+      responses(["A", "직접 입력 A", "직접 입력 A", "직접 입력 B"]),
+    );
+
+    expect(summary).toMatchObject({
+      kind: "pie",
+      responseCount: 4,
+      values: [
+        { label: "A", count: 1, percentage: 25 },
+        { label: "직접 입력 A", count: 2, percentage: 50 },
+        { label: "직접 입력 B", count: 1, percentage: 25 },
+      ],
+    });
+  });
+
   it("uses question respondents as the checkbox percentage denominator", () => {
     const summary = summarizeQuestion(
       question({
@@ -72,6 +94,30 @@ describe("Google-style response summaries", () => {
       values: [
         { label: "A", count: 2, percentage: 100 },
         { label: "B", count: 1, percentage: 50 },
+      ],
+    });
+  });
+
+  it("includes free-text Other answers in checkbox bars", () => {
+    const summary = summarizeQuestion(
+      question({
+        type: "checkboxes",
+        rawType: 4,
+        options: [
+          { label: "A", value: "A", isOther: false },
+          { label: "기타", value: "__other__", isOther: true },
+        ],
+      }),
+      responses([["A", "직접 입력 A"], ["직접 입력 B"]]),
+    );
+
+    expect(summary).toMatchObject({
+      kind: "horizontal_bars",
+      responseCount: 2,
+      values: [
+        { label: "A", count: 1, percentage: 50 },
+        { label: "직접 입력 A", count: 1, percentage: 50 },
+        { label: "직접 입력 B", count: 1, percentage: 50 },
       ],
     });
   });

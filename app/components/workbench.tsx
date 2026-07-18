@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   FormImageRef,
   FormItem,
@@ -41,6 +41,79 @@ interface SubmissionProgress {
   accepted: number;
   failed: number;
   error: string | null;
+}
+
+interface RuleIssue {
+  questionId: string;
+  fieldId: string;
+  message: string;
+}
+
+function nonEmptyLines(values: string[]): string[] {
+  return values.map((value) => value.trim()).filter(Boolean);
+}
+
+function usableOtherLines(question: FormQuestion, values: string[]): string[] {
+  const regularValues = new Set(
+    question.options
+      .filter((option) => !option.isOther)
+      .flatMap((option) => [option.label, option.value]),
+  );
+  return [...new Set(
+    nonEmptyLines(values).filter(
+      (value) => value.length <= 20_000 && !regularValues.has(value),
+    ),
+  )];
+}
+
+function AutoGrowTextarea({
+  id,
+  value,
+  onValueChange,
+  ariaDescribedBy,
+}: {
+  id: string;
+  value: string;
+  onValueChange: (value: string) => void;
+  ariaDescribedBy?: string;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const resize = () => {
+      element.style.height = "auto";
+      const styles = window.getComputedStyle(element);
+      const borderHeight =
+        Number.parseFloat(styles.borderTopWidth) +
+        Number.parseFloat(styles.borderBottomWidth);
+      element.style.height = `${element.scrollHeight + borderHeight}px`;
+    };
+    resize();
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, [value]);
+
+  return (
+    <textarea
+      ref={ref}
+      id={id}
+      rows={3}
+      value={value}
+      aria-describedby={ariaDescribedBy}
+      onChange={(event) => onValueChange(event.target.value)}
+    />
+  );
+}
+
+function TechnicalDetails({ children }: { children: React.ReactNode }) {
+  return (
+    <details className="technical-details">
+      <summary>기술 정보</summary>
+      <dl className="question-meta">{children}</dl>
+    </details>
+  );
 }
 
 function answerLabel(answer: GeneratedAnswer | undefined): string {
@@ -96,14 +169,108 @@ function ImageView({ image, className = "media-image" }: { image: FormImageRef; 
   );
 }
 
-function RuleEditor({
+function OtherAnswerEditor({
   question,
   rule,
   onChange,
+  issue,
+}: {
+  question: FormQuestion;
+  rule: Extract<GenerationRule, { kind: "choice" | "checkboxes" }>;
+  onChange: (next: GenerationRule) => void;
+  issue?: RuleIssue;
+}) {
+  if (!question.options.some((option) => option.isOther)) return null;
+  const other = rule.other ?? { enabled: false, probability: 0.15, samples: [] };
+  const fieldId = `other-pool-${question.id}`;
+  const noteId = `other-pool-note-${question.id}`;
+
+  return (
+    <div className="other-answer-editor">
+      <label>
+        기타 직접 입력
+        <select
+          value={other.enabled ? "manual" : "off"}
+          onChange={(event) => {
+            const enabled = event.target.value === "manual";
+            if (rule.kind === "checkboxes" && !enabled) {
+              const regularCount = Math.max(
+                1,
+                question.options.filter((option) => !option.isOther).length,
+              );
+              onChange({
+                ...rule,
+                maxSelections: Math.min(rule.maxSelections, regularCount),
+                other: { ...other, enabled },
+              });
+              return;
+            }
+            onChange({ ...rule, other: { ...other, enabled } });
+          }}
+        >
+          <option value="off">사용 안 함</option>
+          <option value="manual">직접 입력 목록에서 생성</option>
+        </select>
+      </label>
+      {other.enabled && (
+        <>
+          <label>
+            기타 선택 비율
+            <span className="percent-input">
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={Math.round(other.probability * 100)}
+                onChange={(event) => onChange({
+                  ...rule,
+                  other: {
+                    ...other,
+                    probability: Math.max(0.01, Math.min(1, Number(event.target.value) / 100)),
+                  },
+                })}
+              />
+              <span aria-hidden="true">%</span>
+            </span>
+          </label>
+          <label className="wide-field" htmlFor={fieldId}>
+            기타 응답 문구
+            <AutoGrowTextarea
+              id={fieldId}
+              value={other.samples.join("\n")}
+              ariaDescribedBy={issue?.fieldId === fieldId ? `${noteId} ${fieldId}-error` : noteId}
+              onValueChange={(value) => onChange({
+                ...rule,
+                other: { ...other, samples: value.split(/\r?\n/) },
+              })}
+            />
+          </label>
+          <p className="field-note" id={noteId}>
+            한 줄이 응답 하나입니다. 사용 가능한 문구 {usableOtherLines(question, other.samples).length}개
+          </p>
+          {issue?.fieldId === fieldId && (
+            <p className="inline-error" id={`${fieldId}-error`} role="alert">{issue.message}</p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function RuleEditor({
+  question,
+  rule,
+  textSource,
+  onTextSourceChange,
+  onChange,
+  issue,
 }: {
   question: FormQuestion;
   rule: GenerationRule | undefined;
+  textSource: "ai" | "manual" | "rules";
+  onTextSourceChange: (source: "ai" | "manual") => void;
   onChange: (next: GenerationRule) => void;
+  issue?: RuleIssue;
 }) {
   if (!rule || rule.kind === "unsupported") {
     return <div className="rule-editor"><p className="rule-heading">생성 설정</p><span>자동 생성 제외</span></div>;
@@ -119,29 +286,55 @@ function RuleEditor({
   }
 
   if (rule.kind === "text") {
+    if (textSource === "rules") {
+      return (
+        <div className="rule-editor compact-rule-editor">
+          <p className="rule-heading">생성 설정</p>
+          <p className="rule-note">검증 조건에 맞춰 자동으로 생성합니다.</p>
+        </div>
+      );
+    }
+
+    const fieldId = `text-pool-${question.id}`;
+    const noteId = `text-pool-note-${question.id}`;
     return (
       <div className="rule-editor">
         <p className="rule-heading">생성 설정</p>
         <label>
-          생성 순서
+          생성 방식
           <select
-            value={rule.mode}
-            onChange={(event) => onChange({ ...rule, mode: event.target.value as "sequence" | "sample_pool" })}
+            value={textSource}
+            onChange={(event) => onTextSourceChange(event.target.value as "ai" | "manual")}
           >
-            <option value="sample_pool">문구 중 무작위</option>
-            <option value="sequence">위에서부터 순서대로</option>
+            <option value="ai">AI 자동 생성</option>
+            <option value="manual">직접 입력 목록</option>
           </select>
         </label>
-        <label className="wide-field">
-          생성 문구 (한 줄에 하나)
-          <textarea
-            value={rule.samples.join("\n")}
-            onChange={(event) => onChange({
-              ...rule,
-              samples: event.target.value.split(/\r?\n/).map((value) => value.trim()).filter(Boolean),
-            })}
-          />
-        </label>
+        {textSource === "ai" ? (
+          <p className="rule-note">응답 생성 버튼을 누를 때 문항에 맞는 문구를 새로 만듭니다.</p>
+        ) : (
+          <>
+            <label className="wide-field" htmlFor={fieldId}>
+              응답 문구
+              <AutoGrowTextarea
+                id={fieldId}
+                value={rule.samples.join("\n")}
+                ariaDescribedBy={issue?.fieldId === fieldId ? `${noteId} ${fieldId}-error` : noteId}
+                onValueChange={(value) => onChange({
+                  ...rule,
+                  mode: "sample_pool",
+                  samples: value.split(/\r?\n/),
+                })}
+              />
+            </label>
+            <p className="field-note" id={noteId}>
+              한 줄이 응답 하나입니다. 생성할 때 목록에서 무작위로 선택합니다. 사용 가능한 문구 {nonEmptyLines(rule.samples).length}개
+            </p>
+            {issue?.fieldId === fieldId && (
+              <p className="inline-error" id={`${fieldId}-error`} role="alert">{issue.message}</p>
+            )}
+          </>
+        )}
       </div>
     );
   }
@@ -177,12 +370,15 @@ function RuleEditor({
             </select>
           </label>
         )}
+        {rule.mode !== "fixed" && (
+          <OtherAnswerEditor question={question} rule={rule} onChange={onChange} issue={issue} />
+        )}
       </div>
     );
   }
 
   if (rule.kind === "checkboxes") {
-    const maximum = Math.max(1, question.options.length);
+    const maximum = Math.max(1, question.options.filter((option) => !option.isOther).length + (rule.other?.enabled ? 1 : 0));
     return (
       <div className="rule-editor">
         <p className="rule-heading">생성 설정</p>
@@ -206,6 +402,7 @@ function RuleEditor({
             onChange={(event) => onChange({ ...rule, maxSelections: Number(event.target.value) })}
           />
         </label>
+        <OtherAnswerEditor question={question} rule={rule} onChange={onChange} issue={issue} />
       </div>
     );
   }
@@ -230,17 +427,28 @@ function RuleEditor({
 function QuestionView({
   question,
   rule,
+  textSource,
+  onTextSourceChange,
   onRuleChange,
+  issue,
 }: {
   question: FormQuestion;
   rule: GenerationRule | undefined;
+  textSource: "ai" | "manual" | "rules";
+  onTextSourceChange: (source: "ai" | "manual") => void;
   onRuleChange: (next: GenerationRule) => void;
+  issue?: RuleIssue;
 }) {
   return (
     <article className="question-item" id={`question-${question.id}`}>
       <div className="question-title-row">
         <h3>{question.title || "제목 없음"}</h3>
       </div>
+
+      <p className="item-byline">
+        <span>유형: {TYPE_LABEL[question.type]}</span>
+        <span>필수: {question.required ? "O" : "X"}</span>
+      </p>
 
       {question.description && <p className="question-description">{question.description}</p>}
 
@@ -253,9 +461,7 @@ function QuestionView({
           {question.options.map((option, index) => (
             <li className="option" key={`${option.index ?? index}:${option.value}`}>
               <div>
-                <span>{option.label}{option.isOther ? " (기타)" : ""}</span>
-                {option.value !== option.label && <small>제출값: {option.value}</small>}
-                {option.branchTarget && <small>이동: {navigationLabel(option.branchTarget)}</small>}
+                <span>{option.isOther ? "기타 (직접 입력)" : option.label}</span>
                 {option.image && <ImageView image={option.image} />}
               </div>
             </li>
@@ -268,17 +474,17 @@ function QuestionView({
         <div className="grid-table-wrap">
           <p className="content-label">행과 열</p>
           <table className="grid-table">
-            <caption className="sr-only">{question.title}의 행, 열 및 entry ID</caption>
+            <caption className="sr-only">{question.title}의 행과 열</caption>
             <thead>
               <tr>
-                <th>행 / entry ID</th>
-                {question.grid.columns.map((column) => <th key={column.id}>{column.label}<br /><small>{column.id}</small></th>)}
+                <th>행</th>
+                {question.grid.columns.map((column) => <th key={column.id}>{column.label}</th>)}
               </tr>
             </thead>
             <tbody>
               {question.grid.rows.map((row) => (
                 <tr key={row.id}>
-                  <th>{row.label}<br /><small>{row.entryId ?? row.id}</small></th>
+                  <th>{row.label}</th>
                   {question.grid?.columns.map((column) => <td key={column.id}>선택</td>)}
                 </tr>
               ))}
@@ -291,9 +497,16 @@ function QuestionView({
         </div>
       )}
 
-      <dl className="question-meta">
-        <dt>유형</dt><dd>{TYPE_LABEL[question.type]}</dd>
-        <dt>필수</dt><dd>{question.required ? "O" : "X"}</dd>
+      <RuleEditor
+        question={question}
+        rule={rule}
+        textSource={textSource}
+        onTextSourceChange={onTextSourceChange}
+        onChange={onRuleChange}
+        issue={issue}
+      />
+
+      <TechnicalDetails>
         <dt>item ID</dt><dd>{question.itemId}</dd>
         <dt>entry ID</dt>
         <dd>{question.entryIds.length > 0 ? question.entryIds.map((id) => <div key={id}>{id}</div>) : "없음"}</dd>
@@ -314,9 +527,25 @@ function QuestionView({
         {question.time && (
           <><dt>시간 옵션</dt><dd>{question.time.kind === "duration" ? "기간" : "시각"}</dd></>
         )}
-      </dl>
-
-      <RuleEditor question={question} rule={rule} onChange={onRuleChange} />
+        {question.options.some((option) => option.value !== option.label || option.branchTarget) && (
+          <>
+            <dt>선택지 제출값</dt>
+            <dd>{question.options.map((option, index) => (
+              <div key={`${option.index ?? index}:${option.value}`}>
+                {option.label}: {option.value}{option.branchTarget ? ` / ${navigationLabel(option.branchTarget)}` : ""}
+              </div>
+            ))}</dd>
+          </>
+        )}
+        {question.grid && (
+          <>
+            <dt>행 entry ID</dt>
+            <dd>{question.grid.rows.map((row) => <div key={row.id}>{row.label}: {row.entryId ?? row.id}</div>)}</dd>
+            <dt>열 ID</dt>
+            <dd>{question.grid.columns.map((column) => <div key={column.id}>{column.label}: {column.id}</div>)}</dd>
+          </>
+        )}
+      </TechnicalDetails>
     </article>
   );
 }
@@ -326,12 +555,12 @@ function ContentView({ item }: { item: Exclude<FormItem, { kind: "question" }> }
     return (
       <article className="content-item section-item" id={`item-${item.itemId}`}>
         <h3>{item.title || "제목 없는 섹션"}</h3>
+        <p className="item-byline"><span>유형: 섹션</span></p>
         {item.description && <p>{item.description}</p>}
-        <dl className="question-meta">
-          <dt>분류</dt><dd>섹션</dd>
+        <TechnicalDetails>
           <dt>item ID</dt><dd>{item.itemId}</dd>
           <dt>다음 이동</dt><dd>{navigationLabel(item.navigation)}</dd>
-        </dl>
+        </TechnicalDetails>
       </article>
     );
   }
@@ -340,8 +569,9 @@ function ContentView({ item }: { item: Exclude<FormItem, { kind: "question" }> }
     return (
       <article className="content-item" id={`item-${item.itemId}`}>
         <h3>{item.title || "제목 없는 설명"}</h3>
+        <p className="item-byline"><span>유형: 제목 및 설명</span></p>
         {item.description && <p>{item.description}</p>}
-        <dl className="question-meta"><dt>분류</dt><dd>제목 및 설명</dd><dt>item ID</dt><dd>{item.itemId}</dd></dl>
+        <TechnicalDetails><dt>item ID</dt><dd>{item.itemId}</dd></TechnicalDetails>
       </article>
     );
   }
@@ -350,9 +580,10 @@ function ContentView({ item }: { item: Exclude<FormItem, { kind: "question" }> }
     return (
       <article className="content-item" id={`item-${item.itemId}`}>
         <h3>{item.title || item.image.altText || "이미지"}</h3>
+        <p className="item-byline"><span>유형: 이미지</span></p>
         {item.description && <p>{item.description}</p>}
-        <dl className="question-meta"><dt>분류</dt><dd>이미지</dd><dt>item ID</dt><dd>{item.itemId}</dd><dt>이미지 ID</dt><dd>{item.image.sourceId}</dd></dl>
         <ImageView image={item.image} />
+        <TechnicalDetails><dt>item ID</dt><dd>{item.itemId}</dd><dt>이미지 ID</dt><dd>{item.image.sourceId}</dd></TechnicalDetails>
       </article>
     );
   }
@@ -360,8 +591,8 @@ function ContentView({ item }: { item: Exclude<FormItem, { kind: "question" }> }
   return (
     <article className="content-item" id={`item-${item.itemId}`}>
       <h3>{item.title || "동영상"}</h3>
+      <p className="item-byline"><span>유형: 동영상</span></p>
       {item.description && <p>{item.description}</p>}
-      <dl className="question-meta"><dt>분류</dt><dd>동영상</dd><dt>item ID</dt><dd>{item.itemId}</dd><dt>video ID</dt><dd>{item.video.videoId}</dd></dl>
       <iframe
         className="video-frame"
         src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(item.video.videoId)}`}
@@ -370,6 +601,7 @@ function ContentView({ item }: { item: Exclude<FormItem, { kind: "question" }> }
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen
       />
+      <TechnicalDetails><dt>item ID</dt><dd>{item.itemId}</dd><dt>video ID</dt><dd>{item.video.videoId}</dd></TechnicalDetails>
     </article>
   );
 }
@@ -386,9 +618,7 @@ function needsAiText(question: FormQuestion): boolean {
   ) {
     return false;
   }
-  return !/이름|성명|전화|연락처|휴대폰|이메일|메일\s*주소|학번|사번|주소|우편|url|링크|나이|연령|숫자|수치|금액|생년월일|날짜|시간/i.test(
-    `${question.title} ${question.description ?? ""}`,
-  );
+  return true;
 }
 
 export function Workbench() {
@@ -406,6 +636,7 @@ export function Workbench() {
   const [previewTab, setPreviewTab] = useState<"summary" | "individual">("summary");
   const [submission, setSubmission] = useState<SubmissionProgress | null>(null);
   const [manualTextQuestionIds, setManualTextQuestionIds] = useState<Set<string>>(new Set());
+  const [ruleIssue, setRuleIssue] = useState<RuleIssue | null>(null);
   const busy = analyzing || generating || submitting;
   const formIsStale = Boolean(form && analyzedUrl !== url.trim());
 
@@ -437,6 +668,7 @@ export function Workbench() {
       setResponses([]);
       setSubmission(null);
       setManualTextQuestionIds(new Set());
+      setRuleIssue(null);
       setMessage("분석 완료");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "폼을 분석하지 못했습니다.");
@@ -446,15 +678,20 @@ export function Workbench() {
   }
 
   function updateRule(next: GenerationRule) {
-    const previous = rules.find((rule) => rule.questionId === next.questionId);
     setRules((current) => current.map((rule) => rule.questionId === next.questionId ? next : rule));
-    if (
-      next.kind === "text" &&
-      previous?.kind === "text" &&
-      previous.samples.join("\n") !== next.samples.join("\n")
-    ) {
-      setManualTextQuestionIds((current) => new Set(current).add(next.questionId));
-    }
+    if (ruleIssue?.questionId === next.questionId) setRuleIssue(null);
+    setResponses([]);
+    setSubmission(null);
+  }
+
+  function updateTextSource(questionId: string, source: "ai" | "manual") {
+    setManualTextQuestionIds((current) => {
+      const next = new Set(current);
+      if (source === "manual") next.add(questionId);
+      else next.delete(questionId);
+      return next;
+    });
+    if (ruleIssue?.questionId === questionId) setRuleIssue(null);
     setResponses([]);
     setSubmission(null);
   }
@@ -463,7 +700,14 @@ export function Workbench() {
     if (!form) return rules;
     const textQuestions = form.questions.filter(needsAiText);
     const aiSampleCount = Math.min(requestedCount, 100);
-    let nextRules = [...rules];
+    let nextRules = rules.map((rule) => rule.kind === "text"
+      ? { ...rule, samples: nonEmptyLines(rule.samples) }
+      : rule.kind === "choice" || rule.kind === "checkboxes"
+        ? {
+            ...rule,
+            other: rule.other ? { ...rule.other, samples: nonEmptyLines(rule.other.samples) } : undefined,
+          }
+        : rule);
 
     for (let index = 0; index < textQuestions.length; index += 1) {
       const question = textQuestions[index];
@@ -505,7 +749,43 @@ export function Workbench() {
   async function generate() {
     if (!form || busy || formIsStale) return;
     const requestedCount = Math.max(1, Math.min(500, Math.floor(count || 1)));
+
+    for (const question of form.questions) {
+      const rule = ruleMap.get(question.id);
+      if (!rule?.enabled) continue;
+      if (
+        rule.kind === "text" &&
+        manualTextQuestionIds.has(question.id) &&
+        nonEmptyLines(rule.samples).length === 0
+      ) {
+        const issue = {
+          questionId: question.id,
+          fieldId: `text-pool-${question.id}`,
+          message: "직접 입력 문구를 한 줄 이상 입력해 주세요.",
+        };
+        setRuleIssue(issue);
+        requestAnimationFrame(() => document.getElementById(issue.fieldId)?.focus());
+        return;
+      }
+      if (
+        (rule.kind === "choice" || rule.kind === "checkboxes") &&
+        rule.other?.enabled &&
+        (rule.kind !== "choice" || rule.mode !== "fixed") &&
+        usableOtherLines(question, rule.other.samples).length === 0
+      ) {
+        const issue = {
+          questionId: question.id,
+          fieldId: `other-pool-${question.id}`,
+          message: "기존 선택지와 다른 기타 응답 문구를 한 줄 이상 입력해 주세요.",
+        };
+        setRuleIssue(issue);
+        requestAnimationFrame(() => document.getElementById(issue.fieldId)?.focus());
+        return;
+      }
+    }
+
     setCount(requestedCount);
+    setRuleIssue(null);
     setGenerating(true);
     setError(null);
     setMessage("응답 생성 중");
@@ -516,7 +796,6 @@ export function Workbench() {
       const nextRules = await rulesWithAiAnswers(requestedCount);
       const seed = `${form.source.publicId}:${Date.now()}:${crypto.randomUUID()}`;
       const generated = generateResponses({ form, rules: nextRules, count: requestedCount, seed });
-      setRules(nextRules);
       setResponses(generated);
       setPreviewTab("summary");
       setMessage(`${generated.length}개 응답 생성 완료`);
@@ -565,9 +844,6 @@ export function Workbench() {
     setSubmitting(false);
   }
 
-  const itemCount = form?.items?.length ?? form?.questions.length ?? 0;
-  const optionCount = form?.questions.reduce((sum, question) => sum + question.options.length, 0) ?? 0;
-  const entryCount = form?.questions.reduce((sum, question) => sum + question.entryIds.length, 0) ?? 0;
   const skippedItems = form?.diagnostics.skippedItems ?? [];
 
   return (
@@ -583,6 +859,7 @@ export function Workbench() {
               setUrl(event.target.value);
               setError(null);
               setMessage(null);
+              setRuleIssue(null);
             }}
             placeholder="Google Forms 링크"
             maxLength={2_048}
@@ -602,34 +879,12 @@ export function Workbench() {
           <div className="form-heading" id="form-overview">
             <h1>{form.title || "제목 없는 설문지"}</h1>
             {form.description && <p>{form.description}</p>}
-            <div className="form-counts">
-              <span>항목 {itemCount}</span>
-              <span>문항 {form.questions.length}</span>
-              <span>섹션 {form.sections.length}</span>
-              <span>선택지 {optionCount}</span>
-              <span>entry ID {entryCount}</span>
-              <span>제외 {skippedItems.length}</span>
-            </div>
-            <dl className="question-meta form-source-meta">
-              <dt>폼 ID</dt><dd>{form.source.publicId}</dd>
-              <dt>원본 URL</dt><dd><a href={form.source.canonicalUrl} target="_blank" rel="noreferrer">{form.source.canonicalUrl}</a></dd>
-            </dl>
-            <details className="form-technical">
-              <summary>폼 기술 정보</summary>
-              <dl className="question-meta">
-                <dt>언어</dt><dd>{form.locale}</dd>
-                <dt>파서</dt><dd>{form.parserVersion} / schema {form.schemaVersion}</dd>
-                {form.submission?.actionUrl && <><dt>제출 URL</dt><dd>{form.submission.actionUrl}</dd></>}
-                {form.submission?.pageHistory && <><dt>pageHistory</dt><dd>{form.submission.pageHistory}</dd></>}
-              </dl>
-            </details>
           </div>
 
           <div className="result-layout">
             <aside className="result-nav">
               <nav aria-label="분석 결과 바로가기">
                 <p>바로가기</p>
-                <a href="#form-overview">폼 정보</a>
                 <a href="#analysis-items">문항 및 콘텐츠</a>
                 {form.sections.length > 1 && (
                   <div className="section-links">
@@ -662,7 +917,10 @@ export function Workbench() {
                       key={`${item.kind}:${item.id}`}
                       question={item}
                       rule={ruleMap.get(item.id)}
+                      textSource={!needsAiText(item) ? "rules" : manualTextQuestionIds.has(item.id) ? "manual" : "ai"}
+                      onTextSourceChange={(source) => updateTextSource(item.id, source)}
                       onRuleChange={updateRule}
+                      issue={ruleIssue?.questionId === item.id ? ruleIssue : undefined}
                     />
                   ) : (
                     <ContentView key={`${item.kind}:${item.id}`} item={item} />
@@ -671,7 +929,10 @@ export function Workbench() {
                       key={question.id}
                       question={question}
                       rule={ruleMap.get(question.id)}
+                      textSource={!needsAiText(question) ? "rules" : manualTextQuestionIds.has(question.id) ? "manual" : "ai"}
+                      onTextSourceChange={(source) => updateTextSource(question.id, source)}
                       onRuleChange={updateRule}
+                      issue={ruleIssue?.questionId === question.id ? ruleIssue : undefined}
                     />
                   ))}
                 </fieldset>
@@ -684,37 +945,33 @@ export function Workbench() {
                     {skippedItems.map((item) => (
                       <article className="content-item" key={item.itemId}>
                         <h3>{item.title || "파일 업로드"}</h3>
-                        <dl className="question-meta">
-                          <dt>분류</dt><dd>파일 업로드 (지원 제외)</dd>
+                        <p className="item-byline"><span>유형: 파일 업로드 · 지원 제외</span></p>
+                        <TechnicalDetails>
                           <dt>item ID</dt><dd>{item.itemId}</dd>
                           <dt>원본 유형</dt><dd>{item.rawType}</dd>
-                        </dl>
+                        </TechnicalDetails>
                       </article>
                     ))}
                   </div>
                 </section>
               )}
 
-              {form.diagnostics.warnings.length > 0 && (
-                <section className="section-block diagnostic-block">
-                  <div className="section-heading"><h2>분석 경고</h2></div>
-                  {form.diagnostics.warnings.map((warning) => <p className="message" key={warning}>{warning}</p>)}
-                </section>
-              )}
-
               <section className="generation-panel" id="response-generation">
                 <div className="panel-heading">
-                  <div><h2>가상 응답 생성</h2><p>주관식은 충남대 API Gateway로 문항에 맞는 문구를 생성합니다.</p></div>
+                  <div><h2>가상 응답 생성</h2><p>문항별 생성 설정을 사용합니다.</p></div>
                 </div>
+                <label className="generation-label" htmlFor="response-count">생성 개수</label>
                 <div className="generation-controls">
-                  <label className="field">
-                    생성 개수
-                    <input type="number" min={1} max={500} value={count} disabled={busy || formIsStale} onChange={(event) => setCount(Number(event.target.value))} />
-                  </label>
+                  <input id="response-count" type="number" min={1} max={500} value={count} disabled={busy || formIsStale} onChange={(event) => setCount(Number(event.target.value))} />
                   <button className="primary-button" type="button" disabled={busy || formIsStale} onClick={() => void generate()}>
                     {generating ? "생성 중" : "응답 생성"}
                   </button>
                 </div>
+                {(generating || responses.length > 0) && (
+                  <p className="generation-status" aria-live="polite">
+                    {generating ? (message ?? "응답 생성 중") : `${responses.length}개 응답 생성 완료`}
+                  </p>
+                )}
               </section>
 
               {responses.length > 0 && (
