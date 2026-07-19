@@ -86,6 +86,39 @@ function notBetween(min: number, max: number): Extract<FormValidation, { kind: "
 }
 
 describe("numeric response generation", () => {
+  it("preserves valid AI or manual samples and replaces only candidates outside validation", () => {
+    const form = formWith(numericQuestion("q-sampled", between(1, 120)));
+    const baseRule = createDefaultRules(form)[0];
+    if (baseRule.kind !== "text") throw new Error("Expected a text rule");
+
+    for (const mode of ["sequence", "sample_pool"] as const) {
+      const responses = generateResponses({
+        form,
+        rules: [{ ...baseRule, mode, samples: ["73"] }],
+        count: 4,
+        seed: `valid-${mode}`,
+      });
+      expect(responses.map((response) => response.answers["q-sampled"])).toEqual([
+        "73",
+        "73",
+        "73",
+        "73",
+      ]);
+    }
+
+    const invalidResponses = generateResponses({
+      form,
+      rules: [{ ...baseRule, mode: "sequence", samples: ["999"] }],
+      count: 8,
+      seed: "invalid-sequence",
+    });
+    expect(invalidResponses.every((response) => {
+      const value = Number(response.answers["q-sampled"]);
+      return value >= 1 && value <= 120 && value !== 999;
+    })).toBe(true);
+    expect(invalidResponses.every((response) => validateGeneratedResponse(form, response).valid)).toBe(true);
+  });
+
   it("samples seeded random integers from an inclusive range instead of walking it sequentially", () => {
     const form = formWith(numericQuestion("q-integer", between(1, 120)));
     const input = {

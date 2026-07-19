@@ -167,9 +167,9 @@ export function isValidCalendarDate(
 }
 
 export function padTextToMinimum(value: string, minimum: number): string {
-  if (value.length >= minimum) return value;
+  if (Array.from(value).length >= minimum) return value;
   const filler = " 테스트 응답 내용을 구체적으로 작성했습니다.";
   let result = value;
-  while (result.length < minimum) result += filler;
+  while (Array.from(result).length < minimum) result += filler;
   return result;
 }

@@ -77,6 +77,7 @@ export interface CnuGatewayClientOptions {
 
 export interface ChatCompletionInput {
   model: string;
+  schemaName?: string;
   messages: Array<{
     role: "system" | "user";
     content: string;
@@ -340,7 +341,7 @@ export class CnuGatewayClient {
       response_format: {
         type: "json_schema",
         json_schema: {
-          name: "generated_survey_answers",
+          name: input.schemaName ?? "generated_survey_answers",
           strict: true,
           schema: input.responseSchema,
         },

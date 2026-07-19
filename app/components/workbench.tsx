@@ -19,7 +19,7 @@ import type {
 import { constraintsForQuestion } from "../../lib/generator/constraints";
 import { generateResponses } from "../../lib/generator/engine";
 import { createDefaultRules } from "../../lib/generator/rules";
-import { validateGeneratedResponse } from "../../lib/generator/validation";
+import { matchesTextConstraints, validateGeneratedResponse } from "../../lib/generator/validation";
 import { ResponseSummaryCard } from "./response-summary";
 
 // These are Google Forms API v1 union member names derived from our normalized
@@ -58,8 +58,9 @@ interface RuleIssue {
   message: string;
 }
 
-type TextGenerationMode = "ai" | "manual";
+type TextGenerationMode = "rules" | "ai" | "manual";
 type TextSource = TextGenerationMode | "rules";
+type PreviewTab = "summary" | "question" | "individual";
 type DisplayFormItem = FormQuestion | Exclude<FormItem, { kind: "section" }>;
 
 function nonEmptyLines(values: string[]): string[] {
@@ -67,9 +68,26 @@ function nonEmptyLines(values: string[]): string[] {
 }
 
 function defaultAiPrompt(question: FormQuestion): string {
-  return question.type === "paragraph"
-    ? "문항의 의도와 설명을 반영해 자연스럽고 구체적인 서술형 응답을 서로 다르게 생성해 주세요."
-    : "문항의 의도와 설명을 반영해 자연스럽고 간결한 단답형 응답을 서로 다르게 생성해 주세요.";
+  const constraints = constraintsForQuestion(question);
+  const format = constraints.textKind === "number"
+    ? "숫자만"
+    : constraints.textKind === "email"
+      ? "유효한 이메일 주소 형식으로"
+      : constraints.textKind === "url"
+        ? "유효한 웹 주소 형식으로"
+        : question.type === "paragraph"
+          ? "자연스럽고 구체적인 서술형 문장으로"
+          : "자연스럽고 간결한 단답형 문구로";
+  const limits = [
+    constraints.minValue !== undefined ? `${constraints.minValue} 이상` : null,
+    constraints.maxValue !== undefined ? `${constraints.maxValue} 이하` : null,
+    constraints.excludedNumberRange
+      ? `${constraints.excludedNumberRange.min}–${constraints.excludedNumberRange.max} 구간 제외`
+      : null,
+    constraints.minLength !== undefined ? `최소 ${constraints.minLength}자` : null,
+    constraints.maxLength !== undefined ? `최대 ${constraints.maxLength}자` : null,
+  ].filter(Boolean).join(", ");
+  return `문항의 제목과 설명을 반영해 ${format} 서로 다른 응답을 생성해 주세요.${limits ? ` 조건: ${limits}.` : ""}`;
 }
 
 function ruleGeneratedTextLabel(question: FormQuestion): string {
@@ -169,6 +187,43 @@ function answerLabel(answer: GeneratedAnswer | undefined): string {
   return Object.entries(answer)
     .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : value}`)
     .join(" · ");
+}
+
+function hasGeneratedAnswer(answer: GeneratedAnswer | undefined): answer is GeneratedAnswer {
+  if (answer === undefined) return false;
+  if (typeof answer === "string") return answer.trim().length > 0;
+  if (Array.isArray(answer)) return answer.some((value) => value.trim().length > 0);
+  return Object.values(answer).some((value) => Array.isArray(value)
+    ? value.some((part) => part.trim().length > 0)
+    : value.trim().length > 0);
+}
+
+function groupedQuestionAnswers(
+  question: FormQuestion,
+  responses: GeneratedResponse[],
+): Array<{ label: string; count: number }> {
+  const counts = new Map<string, number>();
+  const optionOrder = new Map(question.options.flatMap((option, index) => [
+    [option.value, index] as const,
+    [option.label, index] as const,
+  ]));
+  for (const response of responses) {
+    const answer = response.answers[question.id];
+    if (!hasGeneratedAnswer(answer)) continue;
+    const label = question.type === "checkboxes" && Array.isArray(answer)
+      ? [...answer]
+        .sort((left, right) => (
+          (optionOrder.get(left) ?? Number.MAX_SAFE_INTEGER) -
+          (optionOrder.get(right) ?? Number.MAX_SAFE_INTEGER) ||
+          left.localeCompare(right, "ko")
+        ))
+        .join(", ")
+      : answerLabel(answer);
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, "ko"));
 }
 
 function validationLabel(validation: FormValidation): string {
@@ -424,6 +479,251 @@ function QuestionAnswerPreview({ question }: { question: FormQuestion }) {
   return null;
 }
 
+function ResponseNavigator({
+  label,
+  index,
+  total,
+  onChange,
+}: {
+  label: "문항" | "응답";
+  index: number;
+  total: number;
+  onChange: (index: number) => void;
+}) {
+  const clampedIndex = Math.max(0, Math.min(total - 1, index));
+  return (
+    <div className="response-navigator" aria-label={`${label} 이동`}>
+      <button
+        type="button"
+        disabled={clampedIndex <= 0}
+        onClick={() => onChange(clampedIndex - 1)}
+      >
+        이전
+      </button>
+      <label>
+        <span className="sr-only">{label} 번호</span>
+        <input
+          type="number"
+          min={1}
+          max={total}
+          value={clampedIndex + 1}
+          onChange={(event) => {
+            const value = Number(event.target.value);
+            if (Number.isFinite(value)) onChange(Math.max(0, Math.min(total - 1, value - 1)));
+          }}
+        />
+      </label>
+      <span aria-hidden="true">/</span>
+      <b>{total}</b>
+      <button
+        type="button"
+        disabled={clampedIndex >= total - 1}
+        onClick={() => onChange(clampedIndex + 1)}
+      >
+        다음
+      </button>
+    </div>
+  );
+}
+
+function ReadonlyGeneratedAnswer({
+  question,
+  answer,
+}: {
+  question: FormQuestion;
+  answer: GeneratedAnswer | undefined;
+}) {
+  if (!hasGeneratedAnswer(answer)) {
+    return <p className="readonly-empty-answer">응답 없음</p>;
+  }
+
+  if (question.type === "short_text" || question.type === "paragraph") {
+    return (
+      <div className={`readonly-text-answer readonly-text-answer--${question.type}`}>
+        {answerLabel(answer)}
+      </div>
+    );
+  }
+
+  if (question.type === "single_choice" || question.type === "checkboxes") {
+    const answers = new Set(Array.isArray(answer) ? answer : [answerLabel(answer)]);
+    const markerType = question.type === "checkboxes" ? "checkbox" : "radio";
+    const regularValues = new Set(question.options.flatMap((option) => [option.value, option.label]));
+    const customAnswers = [...answers].filter((value) => !regularValues.has(value));
+    return (
+      <ul
+        className="readonly-choice-list"
+        role={markerType === "radio" ? "radiogroup" : "group"}
+        aria-label={`${question.title}의 응답`}
+      >
+        {question.options.map((option, index) => {
+          const selected = option.isOther
+            ? customAnswers.length > 0
+            : answers.has(option.value) || answers.has(option.label);
+          return (
+            <li key={`${option.index ?? index}:${option.value}`} data-selected={selected || undefined}>
+              <span
+                className={`answer-mark answer-mark--${markerType}`}
+                role={markerType}
+                aria-checked={selected}
+                aria-disabled="true"
+              />
+              <span>{option.isOther ? `기타${customAnswers.length > 0 ? `: ${customAnswers.join(", ")}` : ""}` : option.label}</span>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+
+  if (question.type === "dropdown") {
+    return <div className="readonly-dropdown-answer">{answerLabel(answer)}</div>;
+  }
+
+  if ((question.type === "scale" || question.type === "rating") && typeof answer === "string") {
+    const values = question.type === "scale" && question.scale
+      ? Array.from({ length: question.scale.max - question.scale.min + 1 }, (_, index) => question.scale!.min + index)
+      : question.rating
+        ? Array.from({ length: question.rating.max - question.rating.min + 1 }, (_, index) => question.rating!.min + index)
+        : question.options.map((option) => Number(option.value)).filter(Number.isFinite);
+    return (
+      <ol
+        className="readonly-ordinal-answer"
+        role="radiogroup"
+        aria-label={`${question.title}의 응답`}
+        style={{ "--ordinal-count": values.length } as React.CSSProperties}
+      >
+        {values.map((value) => {
+          const selected = String(value) === answer;
+          return (
+          <li key={value} data-selected={selected || undefined}>
+            <span>{value}</span>
+            <i
+              role="radio"
+              aria-checked={selected}
+              aria-disabled="true"
+              aria-label={`${value}`}
+            />
+          </li>
+          );
+        })}
+      </ol>
+    );
+  }
+
+  if (question.grid && typeof answer === "object" && !Array.isArray(answer)) {
+    return (
+      <div className="readonly-grid-wrap" role="region" tabIndex={0} aria-label={`${question.title} 응답 표`}>
+        <table
+          className="readonly-grid-answer"
+          style={{
+            "--readonly-grid-min-width": `${Math.max(280, (question.grid.columns.length + 1) * 70)}px`,
+          } as React.CSSProperties}
+        >
+          <thead>
+            <tr><th />{question.grid.columns.map((column) => <th key={column.id}>{column.label}</th>)}</tr>
+          </thead>
+          <tbody>
+            {question.grid.rows.map((row) => {
+              const rowAnswer = answer[row.id] ?? answer[row.label];
+              const selected = new Set(Array.isArray(rowAnswer) ? rowAnswer : rowAnswer ? [rowAnswer] : []);
+              return (
+                <tr key={row.id}>
+                  <th>{row.label}</th>
+                  {question.grid!.columns.map((column) => {
+                    const isSelected = selected.has(column.label) || selected.has(column.id);
+                    return (
+                      <td key={column.id} data-selected={isSelected || undefined}>
+                        <i
+                          role={question.type === "grid_checkbox" ? "checkbox" : "radio"}
+                          aria-checked={isSelected}
+                          aria-disabled="true"
+                          aria-label={`${row.label} · ${column.label}`}
+                        />
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  return <div className="readonly-value-answer">{answerLabel(answer)}</div>;
+}
+
+function QuestionResponsePanel({
+  question,
+  responses,
+}: {
+  question: FormQuestion;
+  responses: GeneratedResponse[];
+}) {
+  const values = groupedQuestionAnswers(question, responses);
+  return (
+    <div className="question-response-panel">
+      <article className="question-response-title">
+        <h3>{question.title}</h3>
+        <span>응답 {responses.filter((response) => hasGeneratedAnswer(response.answers[question.id])).length}개</span>
+      </article>
+      {values.length > 0 ? (
+        <div className="question-value-list">
+          {values.map((value) => (
+            <article key={value.label}>
+              <p>{value.label}</p>
+              <span>{value.count === 1 ? "응답 1개" : `응답 ${value.count}개`}</span>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="empty-summary">표시할 응답이 없습니다.</p>
+      )}
+    </div>
+  );
+}
+
+function IndividualResponsePanel({
+  form,
+  response,
+  valid,
+}: {
+  form: ImportedForm;
+  response: GeneratedResponse;
+  valid: boolean;
+}) {
+  return (
+    <article className="individual-response-sheet">
+      <header>
+        <h3>{form.title || "제목 없는 설문지"}</h3>
+        {form.description && <p>{form.description}</p>}
+        {!valid && <span>검토 필요</span>}
+      </header>
+      {form.sections.map((section) => {
+        const questions = form.questions.filter((question) => question.sectionId === section.id);
+        if (questions.length === 0) return null;
+        return (
+          <section className="response-section" key={section.id}>
+            <header>
+              <h4>{section.title || `섹션 ${section.index + 1}`}</h4>
+              {section.description && <p>{section.description}</p>}
+            </header>
+            {questions.map((question) => (
+              <div className="response-answer-card" key={question.id}>
+                <h5>{question.title}{question.required && <span aria-label="필수">*</span>}</h5>
+                {question.description && <p>{question.description}</p>}
+                <ReadonlyGeneratedAnswer question={question} answer={response.answers[question.id]} />
+              </div>
+            ))}
+          </section>
+        );
+      })}
+    </article>
+  );
+}
+
 function OtherAnswerEditor({
   question,
   rule,
@@ -552,17 +852,6 @@ function RuleEditor({
   }
 
   if (rule.kind === "text") {
-    if (textSource === "rules") {
-      return (
-        <div className="rule-editor compact-rule-editor">
-          <div className="static-rule-field">
-            <span>생성 방식</span>
-            <strong>{ruleGeneratedTextLabel(question)}</strong>
-          </div>
-        </div>
-      );
-    }
-
     const fieldId = `text-pool-${question.id}`;
     return (
       <div className="rule-editor">
@@ -572,6 +861,9 @@ function RuleEditor({
             value={textSource}
             onChange={(event) => onTextSourceChange(event.target.value as TextGenerationMode)}
           >
+            {hasStructuredTextRule(question) && (
+              <option value="rules">{ruleGeneratedTextLabel(question)}</option>
+            )}
             <option value="ai">AI 자동 생성</option>
             <option value="manual">직접 입력 목록</option>
           </select>
@@ -896,19 +1188,14 @@ function ContentView({
   );
 }
 
-function needsAiText(question: FormQuestion): boolean {
-  if (question.type === "paragraph") return true;
+function isConfigurableTextQuestion(question: FormQuestion): boolean {
+  return question.type === "short_text" || question.type === "paragraph";
+}
+
+function hasStructuredTextRule(question: FormQuestion): boolean {
   if (question.type !== "short_text") return false;
   const constraints = constraintsForQuestion(question);
-  if (
-    constraints.textKind !== "plain" ||
-    constraints.minValue !== undefined ||
-    constraints.maxValue !== undefined ||
-    constraints.excludedNumberRange
-  ) {
-    return false;
-  }
-  return true;
+  return constraints.textKind !== "plain" || Boolean(constraints.excludedNumberRange);
 }
 
 export function Workbench() {
@@ -924,11 +1211,15 @@ export function Workbench() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [previewTab, setPreviewTab] = useState<"summary" | "individual">("summary");
+  const [previewTab, setPreviewTab] = useState<PreviewTab>("summary");
+  const [selectedQuestionIndex, setSelectedQuestionIndex] = useState(0);
+  const [selectedResponseIndex, setSelectedResponseIndex] = useState(0);
   const [submission, setSubmission] = useState<SubmissionProgress | null>(null);
   const [textGenerationModes, setTextGenerationModes] = useState<Record<string, TextGenerationMode>>({});
   const [aiPrompts, setAiPrompts] = useState<Record<string, string>>({});
   const [ruleIssue, setRuleIssue] = useState<RuleIssue | null>(null);
+  const promptSuggestionRequestRef = useRef(0);
+  const editedPromptIdsRef = useRef<Set<string>>(new Set());
   const busy = analyzing || generating || submitting;
   const formIsStale = Boolean(form && analyzedUrl !== url.trim());
 
@@ -951,6 +1242,69 @@ export function Workbench() {
     [form, responses],
   );
   const allResponsesValid = validationResults.every((result) => result.valid);
+  const selectedQuestion = form?.questions[Math.max(0, Math.min(form.questions.length - 1, selectedQuestionIndex))] ?? null;
+  const selectedResponse = responses[Math.max(0, Math.min(responses.length - 1, selectedResponseIndex))] ?? null;
+
+  function selectPreviewTab(tab: PreviewTab) {
+    setPreviewTab(tab);
+  }
+
+  function handlePreviewTabKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    const tabs: PreviewTab[] = ["summary", "question", "individual"];
+    const direction = event.key === "ArrowRight" ? 1 : -1;
+    const next = (tabs.indexOf(previewTab) + direction + tabs.length) % tabs.length;
+    event.preventDefault();
+    setPreviewTab(tabs[next]);
+    requestAnimationFrame(() => document.getElementById(`preview-tab-${tabs[next]}`)?.focus());
+  }
+
+  async function loadPromptSuggestions(importedForm: ImportedForm, requestId: number) {
+    const questions = importedForm.questions
+      .filter(isConfigurableTextQuestion)
+      .map((question) => {
+        const constraints = constraintsForQuestion(question);
+        return {
+          id: question.id,
+          type: question.type as "short_text" | "paragraph",
+          title: question.title,
+          description: question.description,
+          required: question.required,
+          textKind: constraints.textKind,
+          ...(constraints.minLength !== undefined ? { minLength: constraints.minLength } : {}),
+          ...(constraints.maxLength !== undefined ? { maxLength: constraints.maxLength } : {}),
+          ...(constraints.minValue !== undefined ? { minValue: constraints.minValue } : {}),
+          ...(constraints.maxValue !== undefined ? { maxValue: constraints.maxValue } : {}),
+          ...(constraints.excludedNumberRange ? { excludedNumberRange: constraints.excludedNumberRange } : {}),
+          ...(constraints.pattern ? { pattern: constraints.pattern } : {}),
+        };
+      });
+    if (questions.length === 0) return;
+
+    try {
+      const result = await fetch("/api/ai/suggest-prompts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ questions, locale: importedForm.locale || "ko" }),
+      });
+      const payload = await result.json() as {
+        suggestions?: Array<{ questionId: string; prompt: string }>;
+      };
+      if (!result.ok || !payload.suggestions) return;
+      if (promptSuggestionRequestRef.current !== requestId) return;
+      setAiPrompts((current) => ({
+        ...current,
+        ...Object.fromEntries(payload.suggestions!
+          .filter((suggestion) => (
+            suggestion.prompt.trim().length > 0 &&
+            !editedPromptIdsRef.current.has(suggestion.questionId)
+          ))
+          .map((suggestion) => [suggestion.questionId, suggestion.prompt.trim()])),
+      }));
+    } catch {
+      // A constraint-aware local prompt is already present and remains editable.
+    }
+  }
 
   async function analyzeForm(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -959,6 +1313,9 @@ export function Workbench() {
     setAnalyzing(true);
     setError(null);
     setMessage(null);
+
+    const promptSuggestionRequestId = promptSuggestionRequestRef.current + 1;
+    promptSuggestionRequestRef.current = promptSuggestionRequestId;
 
     try {
       const result = await fetch("/api/forms/import", {
@@ -973,16 +1330,20 @@ export function Workbench() {
       setRules(createDefaultRules(payload.form));
       setResponses([]);
       setSubmission(null);
+      setSelectedQuestionIndex(0);
+      setSelectedResponseIndex(0);
+      editedPromptIdsRef.current = new Set();
       setTextGenerationModes(Object.fromEntries(
         payload.form.questions
-          .filter(needsAiText)
-          .map((question) => [question.id, "ai"] as const),
+          .filter(isConfigurableTextQuestion)
+          .map((question) => [question.id, hasStructuredTextRule(question) ? "rules" : "ai"] as const),
       ));
       setAiPrompts(Object.fromEntries(
         payload.form.questions
-          .filter(needsAiText)
+          .filter(isConfigurableTextQuestion)
           .map((question) => [question.id, defaultAiPrompt(question)]),
       ));
+      void loadPromptSuggestions(payload.form, promptSuggestionRequestId);
       setRuleIssue(null);
       setMessage(null);
     } catch (caught) {
@@ -1007,60 +1368,81 @@ export function Workbench() {
   }
 
   function updateAiPrompt(questionId: string, prompt: string) {
+    editedPromptIdsRef.current.add(questionId);
     setAiPrompts((current) => ({ ...current, [questionId]: prompt }));
     setResponses([]);
     setSubmission(null);
   }
 
-  async function rulesWithAiAnswers(requestedCount: number): Promise<GenerationRule[]> {
-    if (!form) return rules;
-    const textQuestions = form.questions.filter(needsAiText);
+  async function rulesWithAiAnswers(requestedCount: number): Promise<{
+    rules: GenerationRule[];
+    fallbackCount: number;
+  }> {
+    if (!form) return { rules, fallbackCount: 0 };
+    const textQuestions = form.questions.filter(isConfigurableTextQuestion);
     const aiSampleCount = Math.min(requestedCount, 100);
-    let nextRules = rules.map((rule) => rule.kind === "text"
-      ? { ...rule, samples: nonEmptyLines(rule.samples) }
-      : rule.kind === "choice" || rule.kind === "checkboxes"
+    let fallbackCount = 0;
+    let nextRules = rules.map((rule) => {
+      if (rule.kind === "text") {
+        const source = textGenerationModes[rule.questionId] ?? "ai";
+        return {
+          ...rule,
+          samples: source === "manual" ? nonEmptyLines(rule.samples) : [],
+        };
+      }
+      return rule.kind === "choice" || rule.kind === "checkboxes"
         ? {
             ...rule,
             other: rule.other ? { ...rule.other, samples: nonEmptyLines(rule.other.samples) } : undefined,
           }
-        : rule);
+        : rule;
+    });
 
     for (let index = 0; index < textQuestions.length; index += 1) {
       const question = textQuestions[index];
       const currentRule = nextRules.find((rule) => rule.questionId === question.id);
       if (!currentRule || currentRule.kind !== "text" || !currentRule.enabled) continue;
       if ((textGenerationModes[question.id] ?? "ai") !== "ai") continue;
-      setMessage(`주관식 문구 생성 중 (${index + 1}/${textQuestions.length})`);
+      setMessage(`AI 응답 생성 중 (${index + 1}/${textQuestions.length})`);
       const constraints = constraintsForQuestion(question);
-      const result = await fetch("/api/ai/generate-text", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          question: {
-            id: question.id,
-            type: question.type,
-            title: question.title,
-            description: question.description,
-            required: question.required,
-            ...(constraints.minLength ? { minLength: constraints.minLength } : {}),
-            ...(constraints.maxLength ? { maxLength: constraints.maxLength } : {}),
-          },
-          count: aiSampleCount,
-          existingAnswers: currentRule.samples.slice(0, 100),
-          locale: form.locale || "ko",
-          prompt: aiPrompts[question.id]?.trim() || undefined,
-        }),
-      });
-      const payload = await result.json() as { answers?: string[]; error?: { message?: string } };
-      if (!result.ok || !payload.answers?.length) {
-        throw new Error(payload.error?.message ?? `“${question.title}” 문구를 생성하지 못했습니다.`);
+      try {
+        const result = await fetch("/api/ai/generate-text", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            question: {
+              id: question.id,
+              type: question.type,
+              title: question.title,
+              description: question.description,
+              required: question.required,
+              ...(constraints.minLength !== undefined ? { minLength: constraints.minLength } : {}),
+              ...(constraints.maxLength !== undefined ? { maxLength: constraints.maxLength } : {}),
+              textKind: constraints.textKind,
+              ...(constraints.minValue !== undefined ? { minValue: constraints.minValue } : {}),
+              ...(constraints.maxValue !== undefined ? { maxValue: constraints.maxValue } : {}),
+              ...(constraints.excludedNumberRange ? { excludedNumberRange: constraints.excludedNumberRange } : {}),
+              ...(constraints.pattern ? { pattern: constraints.pattern } : {}),
+            },
+            count: aiSampleCount,
+            existingAnswers: [],
+            locale: form.locale || "ko",
+            prompt: aiPrompts[question.id]?.trim() || undefined,
+          }),
+        });
+        const payload = await result.json() as { answers?: string[]; error?: { message?: string } };
+        if (!result.ok || !payload.answers?.length) {
+          throw new Error(payload.error?.message ?? `“${question.title}” 문구를 생성하지 못했습니다.`);
+        }
+        nextRules = nextRules.map((rule) => rule.questionId === question.id && rule.kind === "text"
+          ? { ...rule, mode: "sequence", samples: payload.answers! }
+          : rule);
+      } catch {
+        fallbackCount += 1;
       }
-      nextRules = nextRules.map((rule) => rule.questionId === question.id && rule.kind === "text"
-        ? { ...rule, mode: "sequence", samples: payload.answers! }
-        : rule);
     }
 
-    return nextRules;
+    return { rules: nextRules, fallbackCount };
   }
 
   async function generate() {
@@ -1083,6 +1465,20 @@ export function Workbench() {
         setRuleIssue(issue);
         requestAnimationFrame(() => document.getElementById(issue.fieldId)?.focus());
         return;
+      }
+      if (rule.kind === "text" && textGenerationModes[question.id] === "manual") {
+        const invalidSample = nonEmptyLines(rule.samples)
+          .find((sample) => !matchesTextConstraints(question, sample));
+        if (invalidSample) {
+          const issue = {
+            questionId: question.id,
+            fieldId: `text-pool-${question.id}`,
+            message: `문항 조건에 맞지 않는 응답이 있습니다: ${invalidSample}`,
+          };
+          setRuleIssue(issue);
+          requestAnimationFrame(() => document.getElementById(issue.fieldId)?.focus());
+          return;
+        }
       }
       if (
         (rule.kind === "choice" || rule.kind === "checkboxes") &&
@@ -1108,14 +1504,19 @@ export function Workbench() {
     setMessage("응답 생성 중");
     setResponses([]);
     setSubmission(null);
+    promptSuggestionRequestRef.current += 1;
 
     try {
-      const nextRules = await rulesWithAiAnswers(requestedCount);
+      const prepared = await rulesWithAiAnswers(requestedCount);
       const seed = `${form.source.publicId}:${Date.now()}:${crypto.randomUUID()}`;
-      const generated = generateResponses({ form, rules: nextRules, count: requestedCount, seed });
+      const generated = generateResponses({ form, rules: prepared.rules, count: requestedCount, seed });
       setResponses(generated);
       setPreviewTab("summary");
-      setMessage(`${generated.length}개 응답 생성 완료`);
+      setSelectedQuestionIndex(0);
+      setSelectedResponseIndex(0);
+      setMessage(prepared.fallbackCount > 0
+        ? `${generated.length}개 응답 생성 완료 · AI ${prepared.fallbackCount}개 기본 생성으로 대체`
+        : `${generated.length}개 응답 생성 완료`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "응답을 생성하지 못했습니다.");
       setMessage(null);
@@ -1261,7 +1662,9 @@ export function Workbench() {
                             key={item.id}
                             question={item}
                             rule={ruleMap.get(item.id)}
-                            textSource={!needsAiText(item) ? "rules" : (textGenerationModes[item.id] ?? "ai")}
+                            textSource={isConfigurableTextQuestion(item)
+                              ? (textGenerationModes[item.id] ?? (hasStructuredTextRule(item) ? "rules" : "ai"))
+                              : "rules"}
                             aiPrompt={aiPrompts[item.id] ?? ""}
                             onTextSourceChange={(source) => updateTextSource(item.id, source)}
                             onAiPromptChange={(prompt) => updateAiPrompt(item.id, prompt)}
@@ -1319,30 +1722,95 @@ export function Workbench() {
                   <div className="workflow-heading">
                     <h2>미리보기</h2>
                   </div>
-                  <div className="preview-tabs" aria-label="미리보기 방식">
-                    <button type="button" aria-pressed={previewTab === "summary"} onClick={() => setPreviewTab("summary")}>요약</button>
-                    <button type="button" aria-pressed={previewTab === "individual"} onClick={() => setPreviewTab("individual")}>개별 응답</button>
+                  <div
+                    className="preview-tabs"
+                    role="tablist"
+                    aria-label="미리보기 방식"
+                    onKeyDown={handlePreviewTabKeyDown}
+                  >
+                    {([
+                      ["summary", "요약"],
+                      ["question", "문항별"],
+                      ["individual", "개별 응답"],
+                    ] as const).map(([tab, label]) => (
+                      <button
+                        id={`preview-tab-${tab}`}
+                        key={tab}
+                        type="button"
+                        role="tab"
+                        aria-selected={previewTab === tab}
+                        aria-controls={`preview-panel-${tab}`}
+                        tabIndex={previewTab === tab ? 0 : -1}
+                        onClick={() => selectPreviewTab(tab)}
+                      >
+                        {label}
+                      </button>
+                    ))}
                   </div>
 
-                  {previewTab === "summary" ? (
-                    <div className="summary-list">
+                  {previewTab === "summary" && (
+                    <div
+                      className="summary-list"
+                      id="preview-panel-summary"
+                      role="tabpanel"
+                      aria-labelledby="preview-tab-summary"
+                    >
                       {form.questions.map((question) => <ResponseSummaryCard key={question.id} question={question} responses={responses} />)}
                     </div>
-                  ) : (
-                    <div className="individual-list">
-                      {responses.map((response, index) => (
-                        <details className="individual-response" key={response.id} open={index === 0}>
-                          <summary>응답 {index + 1}{validationResults[index]?.valid ? "" : " (검토 필요)"}</summary>
-                          <dl className="answer-list">
+                  )}
+
+                  {previewTab === "question" && selectedQuestion && (
+                    <div
+                      className="question-preview"
+                      id="preview-panel-question"
+                      role="tabpanel"
+                      aria-labelledby="preview-tab-question"
+                    >
+                      <div className="preview-navigator-bar">
+                        <label className="question-picker">
+                          <span className="sr-only">문항 선택</span>
+                          <select
+                            value={selectedQuestion.id}
+                            onChange={(event) => setSelectedQuestionIndex(
+                              Math.max(0, form.questions.findIndex((question) => question.id === event.target.value)),
+                            )}
+                          >
                             {form.questions.map((question) => (
-                              <div key={question.id} className="answer-pair">
-                                <dt>{question.title}</dt>
-                                <dd>{answerLabel(response.answers[question.id])}</dd>
-                              </div>
+                              <option key={question.id} value={question.id}>{question.title}</option>
                             ))}
-                          </dl>
-                        </details>
-                      ))}
+                          </select>
+                        </label>
+                        <ResponseNavigator
+                          label="문항"
+                          index={selectedQuestionIndex}
+                          total={form.questions.length}
+                          onChange={setSelectedQuestionIndex}
+                        />
+                      </div>
+                      <QuestionResponsePanel question={selectedQuestion} responses={responses} />
+                    </div>
+                  )}
+
+                  {previewTab === "individual" && selectedResponse && (
+                    <div
+                      className="individual-preview"
+                      id="preview-panel-individual"
+                      role="tabpanel"
+                      aria-labelledby="preview-tab-individual"
+                    >
+                      <div className="preview-navigator-bar preview-navigator-bar--individual">
+                        <ResponseNavigator
+                          label="응답"
+                          index={selectedResponseIndex}
+                          total={responses.length}
+                          onChange={setSelectedResponseIndex}
+                        />
+                      </div>
+                      <IndividualResponsePanel
+                        form={form}
+                        response={selectedResponse}
+                        valid={validationResults[selectedResponseIndex]?.valid ?? false}
+                      />
                     </div>
                   )}
                 </section>

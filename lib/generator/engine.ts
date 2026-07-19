@@ -11,6 +11,7 @@ import {
   padTextToMinimum,
 } from "./constraints";
 import { resolveResponseNavigation } from "./navigation";
+import { matchesTextConstraints } from "./validation";
 
 export const RESPONSE_GENERATOR_VERSION = "deterministic-preview/2026-07-v4";
 
@@ -180,6 +181,7 @@ function normalizedTextAnswer(
   random: () => number,
 ): string {
   const constraints = constraintsForQuestion(question);
+  if (matchesTextConstraints(question, candidate)) return candidate;
   if (constraints.textKind === "number") {
     return numericTextAnswer(question, random);
   }
@@ -194,7 +196,9 @@ function normalizedTextAnswer(
     answer = padTextToMinimum(answer, Math.max(0, Math.trunc(constraints.minLength)));
   }
   if (constraints.maxLength !== undefined) {
-    answer = answer.slice(0, Math.max(0, Math.trunc(constraints.maxLength)));
+    answer = Array.from(answer)
+      .slice(0, Math.max(0, Math.trunc(constraints.maxLength)))
+      .join("");
   }
   return answer;
 }

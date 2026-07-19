@@ -38,12 +38,13 @@ function isMissing(answer: unknown): boolean {
   return isRecord(answer) && Object.keys(answer).length === 0;
 }
 
-function matchesTextConstraints(question: FormQuestion, answer: string): boolean {
+export function matchesTextConstraints(question: FormQuestion, answer: string): boolean {
   const constraints = constraintsForQuestion(question);
-  if (constraints.minLength !== undefined && answer.length < constraints.minLength) {
+  const characterLength = Array.from(answer).length;
+  if (constraints.minLength !== undefined && characterLength < constraints.minLength) {
     return false;
   }
-  if (constraints.maxLength !== undefined && answer.length > constraints.maxLength) {
+  if (constraints.maxLength !== undefined && characterLength > constraints.maxLength) {
     return false;
   }
   if (constraints.textKind === "number") {

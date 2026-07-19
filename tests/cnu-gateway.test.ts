@@ -233,6 +233,43 @@ describe("CNU API Gateway client", () => {
     expect(requestedBatchSizes).toEqual([2, 1]);
   });
 
+  it("filters AI candidates that violate numeric validation and requests replacements", async () => {
+    const requestedBatchSizes: number[] = [];
+    let completionCall = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/models/")) {
+        return jsonResponse({ data: [{ id: "gpt-5.4-mini" }] });
+      }
+      const body = JSON.parse(String(init?.body));
+      requestedBatchSizes.push(
+        body.response_format.json_schema.schema.properties.answers.minItems,
+      );
+      completionCall += 1;
+      return completionCall === 1
+        ? completionResponse(["999"])
+        : completionResponse(["73"]);
+    });
+    const client = new CnuGatewayClient({
+      apiKey: "unit-test-key",
+      fetchImplementation: fetchMock,
+    });
+    const input = generateTextRequestSchema.parse({
+      question: {
+        type: "short_text",
+        title: "1부터 120 사이의 숫자",
+        textKind: "number",
+        minValue: 1,
+        maxValue: 120,
+      },
+      count: 1,
+    });
+
+    await expect(generateTextAnswers(input, client)).resolves.toMatchObject({
+      answers: ["73"],
+    });
+    expect(requestedBatchSizes).toEqual([1, 1]);
+  });
+
   it("keeps form text untrusted while passing editable generation guidance separately", async () => {
     let postedBody: CompletionRequestBody | undefined;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

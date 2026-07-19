@@ -122,7 +122,7 @@ describe("Google-style response summaries", () => {
     });
   });
 
-  it("deduplicates paragraph display values but keeps the response count", () => {
+  it("keeps every paragraph response, including duplicate text", () => {
     const summary = summarizeQuestion(
       question({ type: "paragraph", rawType: 1 }),
       responses(["같은 문장", "같은 문장", "다른 문장"]),
@@ -131,7 +131,172 @@ describe("Google-style response summaries", () => {
     expect(summary).toEqual({
       kind: "text_list",
       responseCount: 3,
-      values: ["같은 문장", "다른 문장"],
+      values: ["같은 문장", "같은 문장", "다른 문장"],
+    });
+  });
+
+  it("keeps an unconstrained short answer as a raw text list", () => {
+    const summary = summarizeQuestion(
+      question({ type: "short_text", rawType: 0 }),
+      responses(["10", "2", "2"]),
+    );
+
+    expect(summary).toEqual({
+      kind: "text_list",
+      responseCount: 3,
+      values: ["10", "2", "2"],
+    });
+  });
+
+  it("groups and numerically sorts a number-validated short answer", () => {
+    const summary = summarizeQuestion(
+      question({
+        type: "short_text",
+        rawType: 0,
+        validations: [{
+          kind: "number_range",
+          operator: "between",
+          min: 1,
+          max: 120,
+          errorMessage: null,
+          rawCategory: 1,
+          rawOperator: 7,
+        }],
+      }),
+      responses(["10", "2", "2.0", "1"]),
+    );
+
+    expect(summary).toEqual({
+      kind: "vertical_bars",
+      responseCount: 4,
+      values: [
+        { label: "1", count: 1, percentage: 25 },
+        { label: "2", count: 2, percentage: 50 },
+        { label: "10", count: 1, percentage: 25 },
+      ],
+    });
+  });
+
+  it("does not count recursively empty temporal objects as responses", () => {
+    const summary = summarizeQuestion(
+      question({
+        type: "date",
+        rawType: 9,
+        date: { includeYear: true, includeTime: false },
+      }),
+      responses([
+        { year: "", month: "", day: "" },
+        "2026-11-1",
+        "2026-7-2",
+        { year: "2026", month: "07", day: "02" },
+      ]),
+    );
+
+    expect(summary).toEqual({
+      kind: "temporal",
+      responseCount: 3,
+      values: [
+        { label: "2026-07-02", count: 2, percentage: 66.7 },
+        { label: "2026-11-01", count: 1, percentage: 33.3 },
+      ],
+    });
+  });
+
+  it("sorts time durations numerically without wrapping after 24 hours", () => {
+    const summary = summarizeQuestion(
+      question({
+        type: "time",
+        rawType: 10,
+        time: { kind: "duration" },
+      }),
+      responses(["25:2:3", "3:00:00", "25:02:03"]),
+    );
+
+    expect(summary).toEqual({
+      kind: "temporal",
+      responseCount: 3,
+      values: [
+        { label: "3:00:00", count: 1, percentage: 33.3 },
+        { label: "25:02:03", count: 2, percentage: 66.7 },
+      ],
+    });
+  });
+
+  it("uses each grid row's answered count as its percentage denominator", () => {
+    const summary = summarizeQuestion(
+      question({
+        type: "grid_checkbox",
+        rawType: 8,
+        grid: {
+          rows: [
+            { id: "row-a", label: "행 A" },
+            { id: "row-b", label: "행 B" },
+          ],
+          columns: [
+            { id: "column-a", label: "열 A" },
+            { id: "column-b", label: "열 B" },
+          ],
+          binding: "google_internal_row_ids",
+          mode: "multiple",
+        },
+      }),
+      responses([
+        { "row-a": "열 A", "row-b": "열 B" },
+        { "row-a": "열 B" },
+        { "row-b": ["열 A", "열 B"] },
+      ]),
+    );
+
+    expect(summary).toEqual({
+      kind: "grid",
+      responseCount: 3,
+      rows: [
+        {
+          label: "행 A",
+          answeredCount: 2,
+          values: [
+            { label: "열 A", count: 1, percentage: 50 },
+            { label: "열 B", count: 1, percentage: 50 },
+          ],
+        },
+        {
+          label: "행 B",
+          answeredCount: 2,
+          values: [
+            { label: "열 A", count: 1, percentage: 50 },
+            { label: "열 B", count: 2, percentage: 100 },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("keeps zero-count scale points in form order and averages ratings", () => {
+    const summary = summarizeQuestion(
+      question({
+        type: "rating",
+        rawType: 18,
+        options: ["1", "2", "3", "4", "5"].map((label) => ({
+          label,
+          value: label,
+          isOther: false,
+        })),
+        rating: { icon: "star", min: 1, max: 5 },
+      }),
+      responses(["2", "4", "4"]),
+    );
+
+    expect(summary).toMatchObject({
+      kind: "vertical_bars",
+      responseCount: 3,
+      average: 10 / 3,
+      values: [
+        { label: "1", count: 0 },
+        { label: "2", count: 1 },
+        { label: "3", count: 0 },
+        { label: "4", count: 2 },
+        { label: "5", count: 0 },
+      ],
     });
   });
 });
