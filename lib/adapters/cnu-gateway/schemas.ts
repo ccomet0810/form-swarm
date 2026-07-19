@@ -28,6 +28,7 @@ export const normalizedTextQuestionSchema = z
 export const generateTextRequestSchema = z
   .object({
     question: normalizedTextQuestionSchema,
+    prompt: z.string().trim().min(1).max(2_000).optional(),
     count: z.number().int().min(1).max(100),
     existingAnswers: z
       .array(z.string().trim().min(1).max(2_000))

@@ -12,7 +12,7 @@ import {
 } from "./constraints";
 import { resolveResponseNavigation } from "./navigation";
 
-export const RESPONSE_GENERATOR_VERSION = "deterministic-preview/2026-07-v3";
+export const RESPONSE_GENERATOR_VERSION = "deterministic-preview/2026-07-v4";
 
 export interface GeneratedResponseWithNavigation extends GeneratedResponse {
   visitedSectionIds: string[];
@@ -112,35 +112,76 @@ function otherProbability(rule: GeneratorRule): number {
     : 0;
 }
 
+function sampledNumberInInclusiveRange(
+  random: () => number,
+  minimum: number,
+  maximum: number,
+): number {
+  if (minimum === maximum) return minimum;
+
+  const span = maximum - minimum;
+  // The normalized model has no separate integer-only flag. Preserve the
+  // useful distinction it does carry: two safe-integer bounds produce an
+  // integer, while any decimal bound produces a real value.
+  if (
+    Number.isSafeInteger(minimum) &&
+    Number.isSafeInteger(maximum) &&
+    Number.isSafeInteger(span)
+  ) {
+    return randomInt(random, minimum, maximum);
+  }
+
+  const sampled = minimum + span * random();
+  const readable = Number(sampled.toPrecision(15));
+  return Math.max(minimum, Math.min(maximum, readable));
+}
+
+function sampledNumberOutsideClosedRange(
+  random: () => number,
+  minimum: number,
+  maximum: number,
+): number {
+  // `not_between` excludes both normalized endpoints, matching validation.ts.
+  const integerRange = Number.isSafeInteger(minimum) && Number.isSafeInteger(maximum);
+  const offset = () => integerRange
+    ? randomInt(random, 1, 100)
+    : Math.max(1, Math.abs(minimum), Math.abs(maximum)) * Number.EPSILON * 4 +
+      1 + random() * 100;
+  const below = minimum - offset();
+  const above = maximum + offset();
+  const candidates = [below, above].filter((value) =>
+    Number.isFinite(value) && (value < minimum || value > maximum),
+  );
+  return pick(random, candidates) ?? 0;
+}
+
 function numericTextAnswer(
   question: FormQuestion,
-  responseIndex: number,
+  random: () => number,
 ): string {
   const constraints = constraintsForQuestion(question);
   if (constraints.excludedNumberRange) {
     const { min, max } = constraints.excludedNumberRange;
-    return String(Number.isFinite(min - 1) ? min - 1 : max + 1);
+    return String(sampledNumberOutsideClosedRange(random, min, max));
   }
-  const minimum = constraints.minValue ?? 1;
-  const maximum = constraints.maxValue ?? Math.max(minimum, minimum + 100);
-  const low = Math.min(minimum, maximum);
-  const high = Math.max(minimum, maximum);
-  if (low === high) return String(low);
-  if (Number.isInteger(low) && Number.isInteger(high) && high - low <= 10_000) {
-    return String(low + (responseIndex % (high - low + 1)));
-  }
-  const fraction = (responseIndex % 11) / 10;
-  return String(Number((low + (high - low) * fraction).toPrecision(12)));
+
+  const minimum = constraints.minValue;
+  const maximum = constraints.maxValue;
+  const low = minimum ?? (maximum === undefined ? 1 : maximum - 100);
+  const high = maximum ?? (minimum === undefined ? 101 : minimum + 100);
+  if (low > high) return String(low);
+  return String(sampledNumberInInclusiveRange(random, low, high));
 }
 
 function normalizedTextAnswer(
   question: FormQuestion,
   candidate: string,
   responseIndex: number,
+  random: () => number,
 ): string {
   const constraints = constraintsForQuestion(question);
   if (constraints.textKind === "number") {
-    return numericTextAnswer(question, responseIndex);
+    return numericTextAnswer(question, random);
   }
   if (constraints.textKind === "email") {
     return `test${responseIndex + 1}@example.com`;
@@ -229,6 +270,7 @@ function answerQuestion(
         question,
         `샘플 응답 ${responseIndex + 1}`,
         responseIndex,
+        random,
       );
     }
     if (rule.mode === "sequence") {
@@ -236,12 +278,14 @@ function answerQuestion(
         question,
         rule.samples[responseIndex % rule.samples.length],
         responseIndex,
+        random,
       );
     }
     return normalizedTextAnswer(
       question,
       pick(random, rule.samples) ?? `샘플 응답 ${responseIndex + 1}`,
       responseIndex,
+      random,
     );
   }
 

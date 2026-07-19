@@ -7,8 +7,8 @@ import { Circle, Heart, Star, ThumbsUp } from "lucide-react";
 import type {
   FormImageRef,
   FormItem,
-  FormNavigationTarget,
   FormQuestion,
+  FormSection,
   FormValidation,
   GeneratedAnswer,
   GeneratedResponse,
@@ -58,8 +58,36 @@ interface RuleIssue {
   message: string;
 }
 
+type TextGenerationMode = "ai" | "manual";
+type TextSource = TextGenerationMode | "rules";
+type DisplayFormItem = FormQuestion | Exclude<FormItem, { kind: "section" }>;
+
 function nonEmptyLines(values: string[]): string[] {
   return values.map((value) => value.trim()).filter(Boolean);
+}
+
+function defaultAiPrompt(question: FormQuestion): string {
+  return question.type === "paragraph"
+    ? "문항의 의도와 설명을 반영해 자연스럽고 구체적인 서술형 응답을 서로 다르게 생성해 주세요."
+    : "문항의 의도와 설명을 반영해 자연스럽고 간결한 단답형 응답을 서로 다르게 생성해 주세요.";
+}
+
+function ruleGeneratedTextLabel(question: FormQuestion): string {
+  const constraints = constraintsForQuestion(question);
+  if (constraints.textKind === "email") return "테스트 이메일 자동 생성";
+  if (constraints.textKind === "url") return "테스트 URL 자동 생성";
+  if (constraints.excludedNumberRange) {
+    return `${constraints.excludedNumberRange.min}–${constraints.excludedNumberRange.max} 제외 무작위`;
+  }
+  if (constraints.textKind === "number") {
+    if (constraints.minValue !== undefined && constraints.maxValue !== undefined) {
+      return `${constraints.minValue}–${constraints.maxValue} 범위 내 무작위`;
+    }
+    if (constraints.minValue !== undefined) return `${constraints.minValue} 이상 무작위`;
+    if (constraints.maxValue !== undefined) return `${constraints.maxValue} 이하 무작위`;
+    return "숫자 무작위";
+  }
+  return "자동 생성";
 }
 
 function usableOtherLines(question: FormQuestion, values: string[]): string[] {
@@ -81,6 +109,7 @@ function AutoGrowTextarea({
   onValueChange,
   ariaDescribedBy,
   placeholder,
+  maxLength,
   invalid = false,
 }: {
   id: string;
@@ -88,6 +117,7 @@ function AutoGrowTextarea({
   onValueChange: (value: string) => void;
   ariaDescribedBy?: string;
   placeholder?: string;
+  maxLength?: number;
   invalid?: boolean;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -117,6 +147,7 @@ function AutoGrowTextarea({
       aria-describedby={ariaDescribedBy}
       aria-invalid={invalid || undefined}
       placeholder={placeholder}
+      maxLength={maxLength}
       onChange={(event) => onValueChange(event.target.value)}
     />
   );
@@ -138,13 +169,6 @@ function answerLabel(answer: GeneratedAnswer | undefined): string {
   return Object.entries(answer)
     .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : value}`)
     .join(" · ");
-}
-
-function navigationValue(target: FormNavigationTarget | null | undefined): string {
-  if (!target || target.kind === "next") return "kind=next";
-  if (target.kind === "submit") return "kind=submit";
-  if (target.kind === "section") return `kind=section · sectionItemId=${target.sectionItemId}`;
-  return `kind=unknown · rawValue=${target.rawValue}`;
 }
 
 function validationLabel(validation: FormValidation): string {
@@ -302,7 +326,10 @@ function QuestionAnswerPreview({ question }: { question: FormQuestion }) {
     return (
       <div className="answer-preview answer-preview--scale">
         <div className="scale-preview-scroll">
-          <div className="scale-preview">
+          <div
+            className="scale-preview"
+            style={{ "--ordinal-count": values.length } as React.CSSProperties}
+          >
             <span className="scale-edge-label">{question.scale.lowLabel ?? ""}</span>
             <ol className="scale-points" aria-label={`${question.title} 배율`}>
               {values.map((value) => (
@@ -334,7 +361,11 @@ function QuestionAnswerPreview({ question }: { question: FormQuestion }) {
     return (
       <div className="answer-preview answer-preview--rating">
         <div className="rating-preview-scroll">
-          <ol className="rating-preview" aria-label={`${question.title} 등급`}>
+          <ol
+            className="rating-preview"
+            aria-label={`${question.title} 등급`}
+            style={{ "--ordinal-count": values.length } as React.CSSProperties}
+          >
             {values.map((value) => (
               <li className="rating-point" key={value}>
                 <span>{value}</span>
@@ -483,14 +514,18 @@ function RuleEditor({
   question,
   rule,
   textSource,
+  aiPrompt,
   onTextSourceChange,
+  onAiPromptChange,
   onChange,
   issue,
 }: {
   question: FormQuestion;
   rule: GenerationRule | undefined;
-  textSource: "ai" | "manual" | "rules";
-  onTextSourceChange: (source: "ai" | "manual") => void;
+  textSource: TextSource;
+  aiPrompt: string;
+  onTextSourceChange: (source: TextGenerationMode) => void;
+  onAiPromptChange: (prompt: string) => void;
   onChange: (next: GenerationRule) => void;
   issue?: RuleIssue;
 }) {
@@ -522,7 +557,7 @@ function RuleEditor({
         <div className="rule-editor compact-rule-editor">
           <div className="static-rule-field">
             <span>생성 방식</span>
-            <strong>자동 생성</strong>
+            <strong>{ruleGeneratedTextLabel(question)}</strong>
           </div>
         </div>
       );
@@ -535,12 +570,24 @@ function RuleEditor({
           생성 방식
           <select
             value={textSource}
-            onChange={(event) => onTextSourceChange(event.target.value as "ai" | "manual")}
+            onChange={(event) => onTextSourceChange(event.target.value as TextGenerationMode)}
           >
             <option value="ai">AI 자동 생성</option>
             <option value="manual">직접 입력 목록</option>
           </select>
         </label>
+        {textSource === "ai" && (
+          <label className="wide-field ai-prompt-field" htmlFor={`ai-prompt-${question.id}`}>
+            AI 프롬프트
+            <AutoGrowTextarea
+              id={`ai-prompt-${question.id}`}
+              value={aiPrompt}
+              maxLength={2_000}
+              placeholder="예: 간결하고 자연스러운 한국어 응답"
+              onValueChange={onAiPromptChange}
+            />
+          </label>
+        )}
         {textSource === "manual" && (
           <>
             <label className="wide-field" htmlFor={fieldId}>
@@ -653,14 +700,18 @@ function QuestionView({
   question,
   rule,
   textSource,
+  aiPrompt,
   onTextSourceChange,
+  onAiPromptChange,
   onRuleChange,
   issue,
 }: {
   question: FormQuestion;
   rule: GenerationRule | undefined;
-  textSource: "ai" | "manual" | "rules";
-  onTextSourceChange: (source: "ai" | "manual") => void;
+  textSource: TextSource;
+  aiPrompt: string;
+  onTextSourceChange: (source: TextGenerationMode) => void;
+  onAiPromptChange: (prompt: string) => void;
   onRuleChange: (next: GenerationRule) => void;
   issue?: RuleIssue;
 }) {
@@ -696,7 +747,9 @@ function QuestionView({
             question={question}
             rule={rule}
             textSource={textSource}
+            aiPrompt={aiPrompt}
             onTextSourceChange={onTextSourceChange}
+            onAiPromptChange={onAiPromptChange}
             onChange={onRuleChange}
             issue={issue}
           />
@@ -755,22 +808,39 @@ function QuestionView({
   );
 }
 
-function ContentView({ item }: { item: Exclude<FormItem, { kind: "question" }> }) {
-  if (item.kind === "section") {
-    return (
-      <div className="content-item section-item" id={`item-${item.itemId}`}>
-        {item.title && <h3>{item.title}</h3>}
-        {item.description && <p>{item.description}</p>}
-        <InfoDetails>
-          <dt>FormItem.kind</dt><dd>{item.kind}</dd>
-          <dt>Google Forms API</dt><dd>Item.pageBreakItem</dd>
-          <dt>FormItem.itemId</dt><dd>{item.itemId}</dd>
-          <dt>FormItem.rawType</dt><dd>{item.rawType}</dd>
-          <dt>FormSectionItem.navigation</dt><dd>{navigationValue(item.navigation)}</dd>
-        </InfoDetails>
-      </div>
-    );
-  }
+function FormSectionGroup({
+  section,
+  children,
+}: {
+  section: FormSection;
+  children: React.ReactNode;
+}) {
+  const headingId = `form-section-heading-${section.index + 1}`;
+  return (
+    <section
+      className="form-section-group"
+      id={section.itemId ? `item-${section.itemId}` : undefined}
+      aria-labelledby={headingId}
+    >
+      <header className="section-rail">
+        <span className="section-marker" aria-hidden="true">
+          {String(section.index + 1).padStart(2, "0")}
+        </span>
+        <div>
+          <h3 id={headingId}>{section.title || `섹션 ${section.index + 1}`}</h3>
+          {section.description && <p>{section.description}</p>}
+        </div>
+      </header>
+      <div className="section-body item-list">{children}</div>
+    </section>
+  );
+}
+
+function ContentView({
+  item,
+}: {
+  item: Exclude<FormItem, { kind: "question" } | { kind: "section" }>;
+}) {
 
   if (item.kind === "text_block") {
     return (
@@ -856,12 +926,26 @@ export function Workbench() {
   const [error, setError] = useState<string | null>(null);
   const [previewTab, setPreviewTab] = useState<"summary" | "individual">("summary");
   const [submission, setSubmission] = useState<SubmissionProgress | null>(null);
-  const [manualTextQuestionIds, setManualTextQuestionIds] = useState<Set<string>>(new Set());
+  const [textGenerationModes, setTextGenerationModes] = useState<Record<string, TextGenerationMode>>({});
+  const [aiPrompts, setAiPrompts] = useState<Record<string, string>>({});
   const [ruleIssue, setRuleIssue] = useState<RuleIssue | null>(null);
   const busy = analyzing || generating || submitting;
   const formIsStale = Boolean(form && analyzedUrl !== url.trim());
 
   const ruleMap = useMemo(() => new Map(rules.map((rule) => [rule.questionId, rule])), [rules]);
+  const itemsBySection = useMemo(() => {
+    const grouped = new Map<string, DisplayFormItem[]>();
+    if (!form) return grouped;
+    for (const section of form.sections) grouped.set(section.id, []);
+    const orderedItems: Array<FormItem | FormQuestion> = form.items ?? form.questions;
+    for (const item of orderedItems) {
+      if ("kind" in item && item.kind === "section") continue;
+      const sectionItems = grouped.get(item.sectionId) ?? [];
+      sectionItems.push(item);
+      grouped.set(item.sectionId, sectionItems);
+    }
+    return grouped;
+  }, [form]);
   const validationResults = useMemo(
     () => form ? responses.map((response) => validateGeneratedResponse(form, response)) : [],
     [form, responses],
@@ -889,7 +973,16 @@ export function Workbench() {
       setRules(createDefaultRules(payload.form));
       setResponses([]);
       setSubmission(null);
-      setManualTextQuestionIds(new Set());
+      setTextGenerationModes(Object.fromEntries(
+        payload.form.questions
+          .filter(needsAiText)
+          .map((question) => [question.id, "ai"] as const),
+      ));
+      setAiPrompts(Object.fromEntries(
+        payload.form.questions
+          .filter(needsAiText)
+          .map((question) => [question.id, defaultAiPrompt(question)]),
+      ));
       setRuleIssue(null);
       setMessage(null);
     } catch (caught) {
@@ -906,14 +999,15 @@ export function Workbench() {
     setSubmission(null);
   }
 
-  function updateTextSource(questionId: string, source: "ai" | "manual") {
-    setManualTextQuestionIds((current) => {
-      const next = new Set(current);
-      if (source === "manual") next.add(questionId);
-      else next.delete(questionId);
-      return next;
-    });
+  function updateTextSource(questionId: string, source: TextGenerationMode) {
+    setTextGenerationModes((current) => ({ ...current, [questionId]: source }));
     if (ruleIssue?.questionId === questionId) setRuleIssue(null);
+    setResponses([]);
+    setSubmission(null);
+  }
+
+  function updateAiPrompt(questionId: string, prompt: string) {
+    setAiPrompts((current) => ({ ...current, [questionId]: prompt }));
     setResponses([]);
     setSubmission(null);
   }
@@ -935,7 +1029,7 @@ export function Workbench() {
       const question = textQuestions[index];
       const currentRule = nextRules.find((rule) => rule.questionId === question.id);
       if (!currentRule || currentRule.kind !== "text" || !currentRule.enabled) continue;
-      if (manualTextQuestionIds.has(question.id)) continue;
+      if ((textGenerationModes[question.id] ?? "ai") !== "ai") continue;
       setMessage(`주관식 문구 생성 중 (${index + 1}/${textQuestions.length})`);
       const constraints = constraintsForQuestion(question);
       const result = await fetch("/api/ai/generate-text", {
@@ -954,6 +1048,7 @@ export function Workbench() {
           count: aiSampleCount,
           existingAnswers: currentRule.samples.slice(0, 100),
           locale: form.locale || "ko",
+          prompt: aiPrompts[question.id]?.trim() || undefined,
         }),
       });
       const payload = await result.json() as { answers?: string[]; error?: { message?: string } };
@@ -977,7 +1072,7 @@ export function Workbench() {
       if (!rule?.enabled) continue;
       if (
         rule.kind === "text" &&
-        manualTextQuestionIds.has(question.id) &&
+        textGenerationModes[question.id] === "manual" &&
         nonEmptyLines(rule.samples).length === 0
       ) {
         const issue = {
@@ -1155,28 +1250,27 @@ export function Workbench() {
                   <h2>문항 및 콘텐츠</h2>
                 </div>
                 <fieldset className="item-list analysis-fields" disabled={busy || formIsStale}>
-                  {form.items?.map((item) => item.kind === "question" ? (
-                    <QuestionView
-                      key={`${item.kind}:${item.id}`}
-                      question={item}
-                      rule={ruleMap.get(item.id)}
-                      textSource={!needsAiText(item) ? "rules" : manualTextQuestionIds.has(item.id) ? "manual" : "ai"}
-                      onTextSourceChange={(source) => updateTextSource(item.id, source)}
-                      onRuleChange={updateRule}
-                      issue={ruleIssue?.questionId === item.id ? ruleIssue : undefined}
-                    />
-                  ) : (
-                    <ContentView key={`${item.kind}:${item.id}`} item={item} />
-                  )) ?? form.questions.map((question) => (
-                    <QuestionView
-                      key={question.id}
-                      question={question}
-                      rule={ruleMap.get(question.id)}
-                      textSource={!needsAiText(question) ? "rules" : manualTextQuestionIds.has(question.id) ? "manual" : "ai"}
-                      onTextSourceChange={(source) => updateTextSource(question.id, source)}
-                      onRuleChange={updateRule}
-                      issue={ruleIssue?.questionId === question.id ? ruleIssue : undefined}
-                    />
+                  {form.sections.map((section) => (
+                    <FormSectionGroup key={section.id} section={section}>
+                      {(itemsBySection.get(section.id) ?? []).map((item) => {
+                        if ("kind" in item && item.kind !== "question") {
+                          return <ContentView key={`${item.kind}:${item.id}`} item={item} />;
+                        }
+                        return (
+                          <QuestionView
+                            key={item.id}
+                            question={item}
+                            rule={ruleMap.get(item.id)}
+                            textSource={!needsAiText(item) ? "rules" : (textGenerationModes[item.id] ?? "ai")}
+                            aiPrompt={aiPrompts[item.id] ?? ""}
+                            onTextSourceChange={(source) => updateTextSource(item.id, source)}
+                            onAiPromptChange={(prompt) => updateAiPrompt(item.id, prompt)}
+                            onRuleChange={updateRule}
+                            issue={ruleIssue?.questionId === item.id ? ruleIssue : undefined}
+                          />
+                        );
+                      })}
+                    </FormSectionGroup>
                   ))}
                 </fieldset>
               </section>
