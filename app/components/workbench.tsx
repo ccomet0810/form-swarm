@@ -61,6 +61,7 @@ interface RuleIssue {
 type TextGenerationMode = "rules" | "ai" | "manual";
 type TextSource = TextGenerationMode | "rules";
 type PreviewTab = "summary" | "question" | "individual";
+type WorkspaceTab = "questions" | PreviewTab;
 type DisplayFormItem = FormQuestion | Exclude<FormItem, { kind: "section" }>;
 
 function nonEmptyLines(values: string[]): string[] {
@@ -1211,7 +1212,7 @@ export function Workbench() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [previewTab, setPreviewTab] = useState<PreviewTab>("summary");
+  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("questions");
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState(0);
   const [selectedResponseIndex, setSelectedResponseIndex] = useState(0);
   const [submission, setSubmission] = useState<SubmissionProgress | null>(null);
@@ -1245,18 +1246,22 @@ export function Workbench() {
   const selectedQuestion = form?.questions[Math.max(0, Math.min(form.questions.length - 1, selectedQuestionIndex))] ?? null;
   const selectedResponse = responses[Math.max(0, Math.min(responses.length - 1, selectedResponseIndex))] ?? null;
 
-  function selectPreviewTab(tab: PreviewTab) {
-    setPreviewTab(tab);
+  function selectWorkspaceTab(tab: WorkspaceTab) {
+    if (tab !== "questions" && responses.length === 0) return;
+    setWorkspaceTab(tab);
   }
 
-  function handlePreviewTabKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+  function handleWorkspaceTabKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-    const tabs: PreviewTab[] = ["summary", "question", "individual"];
+    const tabs: WorkspaceTab[] = responses.length > 0
+      ? ["questions", "summary", "question", "individual"]
+      : ["questions"];
     const direction = event.key === "ArrowRight" ? 1 : -1;
-    const next = (tabs.indexOf(previewTab) + direction + tabs.length) % tabs.length;
+    const currentIndex = Math.max(0, tabs.indexOf(workspaceTab));
+    const next = (currentIndex + direction + tabs.length) % tabs.length;
     event.preventDefault();
-    setPreviewTab(tabs[next]);
-    requestAnimationFrame(() => document.getElementById(`preview-tab-${tabs[next]}`)?.focus());
+    setWorkspaceTab(tabs[next]);
+    requestAnimationFrame(() => document.getElementById(`workspace-tab-${tabs[next]}`)?.focus());
   }
 
   async function loadPromptSuggestions(importedForm: ImportedForm, requestId: number) {
@@ -1332,6 +1337,7 @@ export function Workbench() {
       setSubmission(null);
       setSelectedQuestionIndex(0);
       setSelectedResponseIndex(0);
+      setWorkspaceTab("questions");
       editedPromptIdsRef.current = new Set();
       setTextGenerationModes(Object.fromEntries(
         payload.form.questions
@@ -1358,6 +1364,7 @@ export function Workbench() {
     if (ruleIssue?.questionId === next.questionId) setRuleIssue(null);
     setResponses([]);
     setSubmission(null);
+    setWorkspaceTab("questions");
   }
 
   function updateTextSource(questionId: string, source: TextGenerationMode) {
@@ -1365,6 +1372,7 @@ export function Workbench() {
     if (ruleIssue?.questionId === questionId) setRuleIssue(null);
     setResponses([]);
     setSubmission(null);
+    setWorkspaceTab("questions");
   }
 
   function updateAiPrompt(questionId: string, prompt: string) {
@@ -1372,6 +1380,7 @@ export function Workbench() {
     setAiPrompts((current) => ({ ...current, [questionId]: prompt }));
     setResponses([]);
     setSubmission(null);
+    setWorkspaceTab("questions");
   }
 
   async function rulesWithAiAnswers(requestedCount: number): Promise<{
@@ -1511,7 +1520,7 @@ export function Workbench() {
       const seed = `${form.source.publicId}:${Date.now()}:${crypto.randomUUID()}`;
       const generated = generateResponses({ form, rules: prepared.rules, count: requestedCount, seed });
       setResponses(generated);
-      setPreviewTab("summary");
+      setWorkspaceTab("summary");
       setSelectedQuestionIndex(0);
       setSelectedResponseIndex(0);
       setMessage(prepared.fallbackCount > 0
@@ -1595,6 +1604,87 @@ export function Workbench() {
           />
           <button type="submit" disabled={busy}>{analyzing ? "분석 중" : "검색"}</button>
         </form>
+
+        {form && (
+          <div className="workspace-toolbar">
+            <div
+              className="workspace-tabs"
+              role="tablist"
+              aria-label="작업 화면"
+              onKeyDown={handleWorkspaceTabKeyDown}
+            >
+              {([
+                ["questions", "문항"],
+                ["summary", "요약"],
+                ["question", "문항별"],
+                ["individual", "개별 응답"],
+              ] as const).map(([tab, label]) => {
+                const responseTab = tab !== "questions";
+                const disabled = responseTab && responses.length === 0;
+                return (
+                  <button
+                    id={`workspace-tab-${tab}`}
+                    key={tab}
+                    type="button"
+                    role="tab"
+                    aria-selected={workspaceTab === tab}
+                    aria-controls={`workspace-panel-${tab}`}
+                    tabIndex={workspaceTab === tab ? 0 : -1}
+                    disabled={disabled}
+                    onClick={() => selectWorkspaceTab(tab)}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="workspace-actions">
+              <label className="toolbar-count" htmlFor="response-count">
+                <span>생성 개수</span>
+                <input
+                  id="response-count"
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={count}
+                  disabled={busy || formIsStale}
+                  onChange={(event) => setCount(Number(event.target.value))}
+                />
+              </label>
+              <button
+                className="toolbar-generate"
+                type="button"
+                disabled={busy || formIsStale}
+                onClick={() => void generate()}
+              >
+                {generating ? "생성 중" : "응답 생성"}
+              </button>
+              <div className="toolbar-submit">
+                <span>실제 제출</span>
+                <button
+                  type="button"
+                  disabled={busy || formIsStale || responses.length === 0 || !allResponsesValid}
+                  onClick={() => void submitSequentially()}
+                >
+                  {submitting
+                    ? `${submission?.done ?? 0}/${responses.length}`
+                    : responses.length > 0
+                      ? `${responses.length}개 순차 제출`
+                      : "순차 제출"}
+                </button>
+              </div>
+            </div>
+
+            {(generating || submitting || message) && (
+              <p className="sr-only" role="status" aria-live="polite">
+                {submitting
+                  ? `응답 제출 중 ${submission?.done ?? 0}/${responses.length}`
+                  : message}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {(error || formIsStale || (!form && message)) && (
@@ -1616,71 +1706,51 @@ export function Workbench() {
           aria-label="Google Forms 분석 결과"
           aria-busy={analyzing}
         >
-          <div className="form-heading" id="form-overview">
-            <h1>{form.title || "제목 없는 설문지"}</h1>
-            {form.description && <p>{form.description}</p>}
-          </div>
+          {workspaceTab !== "individual" && (
+            <div className="form-heading" id="form-overview">
+              <h1>{form.title || "제목 없는 설문지"}</h1>
+              {form.description && <p>{form.description}</p>}
+            </div>
+          )}
 
-          <div className="result-layout">
-            <aside className="result-nav">
-              <nav aria-label="분석 결과 바로가기">
-                <p>바로가기</p>
-                <a href="#analysis-items">문항 및 콘텐츠</a>
-                {form.sections.length > 1 && (
-                  <div className="section-links">
-                    {form.sections.map((section) => {
-                      const firstQuestionId = section.questionIds[0];
-                      const target = section.itemId
-                        ? `#item-${section.itemId}`
-                        : firstQuestionId
-                          ? `#question-${firstQuestionId}`
-                          : "#analysis-items";
-                      return <a key={section.id} href={target}>{section.title || `섹션 ${section.index + 1}`}</a>;
+          {workspaceTab === "questions" && (
+            <div
+              className="workspace-view questions-workspace"
+              id="workspace-panel-questions"
+              role="tabpanel"
+              aria-labelledby="workspace-tab-questions"
+            >
+              <fieldset className="item-list analysis-fields" disabled={busy || formIsStale}>
+                <legend className="sr-only">문항별 응답 생성 설정</legend>
+                {form.sections.map((section) => (
+                  <FormSectionGroup key={section.id} section={section}>
+                    {(itemsBySection.get(section.id) ?? []).map((item) => {
+                      if ("kind" in item && item.kind !== "question") {
+                        return <ContentView key={`${item.kind}:${item.id}`} item={item} />;
+                      }
+                      return (
+                        <QuestionView
+                          key={item.id}
+                          question={item}
+                          rule={ruleMap.get(item.id)}
+                          textSource={isConfigurableTextQuestion(item)
+                            ? (textGenerationModes[item.id] ?? (hasStructuredTextRule(item) ? "rules" : "ai"))
+                            : "rules"}
+                          aiPrompt={aiPrompts[item.id] ?? ""}
+                          onTextSourceChange={(source) => updateTextSource(item.id, source)}
+                          onAiPromptChange={(prompt) => updateAiPrompt(item.id, prompt)}
+                          onRuleChange={updateRule}
+                          issue={ruleIssue?.questionId === item.id ? ruleIssue : undefined}
+                        />
+                      );
                     })}
-                  </div>
-                )}
-                <a href="#response-generation">응답 생성</a>
-                {responses.length > 0 && <a href="#response-preview">미리보기</a>}
-                {responses.length > 0 && <a href="#response-submit">실제 제출</a>}
-              </nav>
-            </aside>
-
-            <div className="result-main">
-              <section className="workflow-section analysis-section" id="analysis-items">
-                <div className="workflow-heading">
-                  <h2>문항 및 콘텐츠</h2>
-                </div>
-                <fieldset className="item-list analysis-fields" disabled={busy || formIsStale}>
-                  {form.sections.map((section) => (
-                    <FormSectionGroup key={section.id} section={section}>
-                      {(itemsBySection.get(section.id) ?? []).map((item) => {
-                        if ("kind" in item && item.kind !== "question") {
-                          return <ContentView key={`${item.kind}:${item.id}`} item={item} />;
-                        }
-                        return (
-                          <QuestionView
-                            key={item.id}
-                            question={item}
-                            rule={ruleMap.get(item.id)}
-                            textSource={isConfigurableTextQuestion(item)
-                              ? (textGenerationModes[item.id] ?? (hasStructuredTextRule(item) ? "rules" : "ai"))
-                              : "rules"}
-                            aiPrompt={aiPrompts[item.id] ?? ""}
-                            onTextSourceChange={(source) => updateTextSource(item.id, source)}
-                            onAiPromptChange={(prompt) => updateAiPrompt(item.id, prompt)}
-                            onRuleChange={updateRule}
-                            issue={ruleIssue?.questionId === item.id ? ruleIssue : undefined}
-                          />
-                        );
-                      })}
-                    </FormSectionGroup>
-                  ))}
-                </fieldset>
-              </section>
+                  </FormSectionGroup>
+                ))}
+              </fieldset>
 
               {skippedItems.length > 0 && (
-                <section className="workflow-section excluded-section">
-                  <div className="workflow-heading"><h2>제외된 항목</h2></div>
+                <section className="excluded-items" aria-labelledby="excluded-items-heading">
+                  <h2 className="excluded-heading" id="excluded-items-heading">제외된 항목</h2>
                   <div className="item-list">
                     {skippedItems.map((item) => (
                       <article className="content-item" key={item.itemId}>
@@ -1696,164 +1766,101 @@ export function Workbench() {
                   </div>
                 </section>
               )}
-
-              <section className="workflow-section generation-panel" id="response-generation">
-                <div className="workflow-heading">
-                  <h2>응답 생성</h2>
-                </div>
-                <div className="generation-controls">
-                  <label htmlFor="response-count">
-                    생성 개수
-                    <input id="response-count" type="number" min={1} max={500} value={count} disabled={busy || formIsStale} onChange={(event) => setCount(Number(event.target.value))} />
-                  </label>
-                  <button className="primary-button" type="button" disabled={busy || formIsStale} onClick={() => void generate()}>
-                    {generating ? "생성 중" : "응답 생성"}
-                  </button>
-                </div>
-                {(generating || responses.length > 0) && (
-                  <p className="generation-status" aria-live="polite">
-                    {generating ? (message ?? "응답 생성 중") : `${responses.length}개 응답 생성 완료`}
-                  </p>
-                )}
-              </section>
-
-              {responses.length > 0 && (
-                <section className="workflow-section preview-panel" id="response-preview">
-                  <div className="workflow-heading">
-                    <h2>미리보기</h2>
-                  </div>
-                  <div
-                    className="preview-tabs"
-                    role="tablist"
-                    aria-label="미리보기 방식"
-                    onKeyDown={handlePreviewTabKeyDown}
-                  >
-                    {([
-                      ["summary", "요약"],
-                      ["question", "문항별"],
-                      ["individual", "개별 응답"],
-                    ] as const).map(([tab, label]) => (
-                      <button
-                        id={`preview-tab-${tab}`}
-                        key={tab}
-                        type="button"
-                        role="tab"
-                        aria-selected={previewTab === tab}
-                        aria-controls={`preview-panel-${tab}`}
-                        tabIndex={previewTab === tab ? 0 : -1}
-                        onClick={() => selectPreviewTab(tab)}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-
-                  {previewTab === "summary" && (
-                    <div
-                      className="summary-list"
-                      id="preview-panel-summary"
-                      role="tabpanel"
-                      aria-labelledby="preview-tab-summary"
-                    >
-                      {form.questions.map((question) => <ResponseSummaryCard key={question.id} question={question} responses={responses} />)}
-                    </div>
-                  )}
-
-                  {previewTab === "question" && selectedQuestion && (
-                    <div
-                      className="question-preview"
-                      id="preview-panel-question"
-                      role="tabpanel"
-                      aria-labelledby="preview-tab-question"
-                    >
-                      <div className="preview-navigator-bar">
-                        <label className="question-picker">
-                          <span className="sr-only">문항 선택</span>
-                          <select
-                            value={selectedQuestion.id}
-                            onChange={(event) => setSelectedQuestionIndex(
-                              Math.max(0, form.questions.findIndex((question) => question.id === event.target.value)),
-                            )}
-                          >
-                            {form.questions.map((question) => (
-                              <option key={question.id} value={question.id}>{question.title}</option>
-                            ))}
-                          </select>
-                        </label>
-                        <ResponseNavigator
-                          label="문항"
-                          index={selectedQuestionIndex}
-                          total={form.questions.length}
-                          onChange={setSelectedQuestionIndex}
-                        />
-                      </div>
-                      <QuestionResponsePanel question={selectedQuestion} responses={responses} />
-                    </div>
-                  )}
-
-                  {previewTab === "individual" && selectedResponse && (
-                    <div
-                      className="individual-preview"
-                      id="preview-panel-individual"
-                      role="tabpanel"
-                      aria-labelledby="preview-tab-individual"
-                    >
-                      <div className="preview-navigator-bar preview-navigator-bar--individual">
-                        <ResponseNavigator
-                          label="응답"
-                          index={selectedResponseIndex}
-                          total={responses.length}
-                          onChange={setSelectedResponseIndex}
-                        />
-                      </div>
-                      <IndividualResponsePanel
-                        form={form}
-                        response={selectedResponse}
-                        valid={validationResults[selectedResponseIndex]?.valid ?? false}
-                      />
-                    </div>
-                  )}
-                </section>
-              )}
-
-              {responses.length > 0 && (
-                <section className="workflow-section submission-panel" id="response-submit">
-                  <div className="workflow-heading">
-                    <h2>실제 제출</h2>
-                  </div>
-                  {!allResponsesValid && <p className="message error">유효하지 않은 응답이 있어 제출할 수 없습니다.</p>}
-                  <button
-                    className="submit-button"
-                    type="button"
-                    disabled={busy || formIsStale || !allResponsesValid}
-                    onClick={() => void submitSequentially()}
-                  >
-                    {submitting ? "제출 중" : `${responses.length}개 순차 제출`}
-                  </button>
-                  {submission && (
-                    <>
-                      <div
-                        className="submission-progress"
-                        role="progressbar"
-                        aria-label="응답 제출 진행률"
-                        aria-valuemin={0}
-                        aria-valuemax={responses.length}
-                        aria-valuenow={submission.done}
-                      >
-                        <i style={{ "--chart-value": `${(submission.done / responses.length) * 100}%` } as React.CSSProperties} />
-                      </div>
-                      <div className="submission-results">
-                        <span>처리 {submission.done}/{responses.length}</span>
-                        <span>성공 {submission.accepted}</span>
-                        <span>실패 {submission.failed}</span>
-                      </div>
-                      {submission.error && <p className="message error">{submission.error}</p>}
-                    </>
-                  )}
-                </section>
-              )}
             </div>
-          </div>
+          )}
+
+          {responses.length > 0 && workspaceTab === "summary" && (
+            <div
+              className="workspace-view summary-list"
+              id="workspace-panel-summary"
+              role="tabpanel"
+              aria-labelledby="workspace-tab-summary"
+            >
+              {form.questions.map((question) => (
+                <ResponseSummaryCard key={question.id} question={question} responses={responses} />
+              ))}
+            </div>
+          )}
+
+          {responses.length > 0 && workspaceTab === "question" && selectedQuestion && (
+            <div
+              className="workspace-view question-preview"
+              id="workspace-panel-question"
+              role="tabpanel"
+              aria-labelledby="workspace-tab-question"
+            >
+              <div className="preview-navigator-bar">
+                <label className="question-picker">
+                  <span className="sr-only">문항 선택</span>
+                  <select
+                    value={selectedQuestion.id}
+                    onChange={(event) => setSelectedQuestionIndex(
+                      Math.max(0, form.questions.findIndex((question) => question.id === event.target.value)),
+                    )}
+                  >
+                    {form.questions.map((question) => (
+                      <option key={question.id} value={question.id}>{question.title}</option>
+                    ))}
+                  </select>
+                </label>
+                <ResponseNavigator
+                  label="문항"
+                  index={selectedQuestionIndex}
+                  total={form.questions.length}
+                  onChange={setSelectedQuestionIndex}
+                />
+              </div>
+              <QuestionResponsePanel question={selectedQuestion} responses={responses} />
+            </div>
+          )}
+
+          {responses.length > 0 && workspaceTab === "individual" && selectedResponse && (
+            <div
+              className="workspace-view individual-preview"
+              id="workspace-panel-individual"
+              role="tabpanel"
+              aria-labelledby="workspace-tab-individual"
+            >
+              <div className="preview-navigator-bar preview-navigator-bar--individual">
+                <ResponseNavigator
+                  label="응답"
+                  index={selectedResponseIndex}
+                  total={responses.length}
+                  onChange={setSelectedResponseIndex}
+                />
+              </div>
+              <IndividualResponsePanel
+                form={form}
+                response={selectedResponse}
+                valid={validationResults[selectedResponseIndex]?.valid ?? false}
+              />
+            </div>
+          )}
+
+          {responses.length > 0 && (!allResponsesValid || submission) && (
+            <section className="submission-feedback" aria-label="실제 제출 상태">
+              {!allResponsesValid && <p className="message error">유효하지 않은 응답이 있어 제출할 수 없습니다.</p>}
+              {submission && (
+                <>
+                  <div
+                    className="submission-progress"
+                    role="progressbar"
+                    aria-label="응답 제출 진행률"
+                    aria-valuemin={0}
+                    aria-valuemax={responses.length}
+                    aria-valuenow={submission.done}
+                  >
+                    <i style={{ "--chart-value": `${(submission.done / responses.length) * 100}%` } as React.CSSProperties} />
+                  </div>
+                  <div className="submission-results">
+                    <span>처리 {submission.done}/{responses.length}</span>
+                    <span>성공 {submission.accepted}</span>
+                    <span>실패 {submission.failed}</span>
+                  </div>
+                </>
+              )}
+            </section>
+          )}
         </section>
       )}
     </main>
