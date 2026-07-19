@@ -15,6 +15,10 @@
   --success: #145c32;
   --shadow-sm: 3px 3px 0 #0a0a0a;
   --shadow-lg: 5px 5px 0 #0a0a0a;
+  --focus-fill: #deded8;
+  --compact-search-height: 74px;
+  --anchor-offset: 88px;
+  --motion-cut: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 * {
@@ -58,14 +62,34 @@ a {
   text-underline-offset: 2px;
 }
 
-button:focus-visible,
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 0;
+  box-shadow: none;
+}
+
 input:focus-visible,
 select:focus-visible,
-textarea:focus-visible,
-a:focus-visible,
+textarea:focus-visible {
+  outline: 0;
+  background: var(--focus-fill);
+  box-shadow: none;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 0;
+  box-shadow: none;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
 summary:focus-visible {
-  outline: 3px solid var(--text);
-  outline-offset: 3px;
+  outline: 0;
+  background: var(--text);
+  color: var(--surface);
 }
 
 .workbench {
@@ -74,19 +98,104 @@ summary:focus-visible {
   padding: 0 0 88px;
 }
 
+.brand-stage {
+  display: flex;
+  height: clamp(280px, 50svh, 520px);
+  align-items: flex-end;
+  overflow: clip;
+  opacity: 1;
+  transition:
+    height 440ms var(--motion-cut),
+    opacity 220ms linear;
+}
+
+.brand-clip {
+  width: 100%;
+  overflow: clip;
+  padding: 22px 0 18px;
+}
+
+.brand-wordmark {
+  display: flex;
+  gap: 0.13em;
+  align-items: baseline;
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(70px, 13.1vw, 164px);
+  font-weight: 950;
+  letter-spacing: -0.085em;
+  line-height: 0.76;
+  white-space: nowrap;
+  transform-origin: left bottom;
+  transition:
+    transform 380ms var(--motion-cut),
+    opacity 170ms linear;
+}
+
+.is-workspace .brand-stage {
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.is-workspace .brand-wordmark {
+  opacity: 0;
+  transform: translateY(-42px) scale(0.94);
+}
+
 .search-region {
   position: sticky;
   z-index: 20;
   top: 0;
+  width: 100%;
+  max-width: 100%;
+  margin-inline: auto;
   padding: 14px 0 12px;
   background: var(--canvas);
   border-bottom: 2px solid var(--line);
+  transition:
+    max-width 360ms var(--motion-cut),
+    padding 360ms var(--motion-cut),
+    border-color 180ms linear;
+}
+
+.is-idle .search-region {
+  max-width: 900px;
+  padding: 0 0 34px;
+  border-bottom-color: transparent;
+}
+
+.search-region::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--text);
+  content: "";
+  opacity: 0;
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+.is-analyzing .search-region {
+  border-bottom-color: transparent;
+}
+
+.is-analyzing .search-region::after {
+  opacity: 1;
+  animation: search-scan 720ms steps(8, end) infinite;
 }
 
 .import-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 104px;
   gap: 0;
+  transition: box-shadow 180ms linear;
+}
+
+.is-idle .import-form {
+  box-shadow: 8px 8px 0 var(--text);
 }
 
 .import-form input,
@@ -107,19 +216,13 @@ summary:focus-visible {
   height: 46px;
   padding: 0 14px;
   border-right: 0;
+  transition:
+    height 280ms var(--motion-cut),
+    background-color 120ms linear;
 }
 
-.import-form input:focus,
-.field input:focus,
-.field select:focus,
-.field textarea:focus,
-.rule-editor input:focus,
-.rule-editor select:focus,
-.rule-editor textarea:focus {
-  border-color: var(--blue);
-  outline: 3px solid var(--text);
-  outline-offset: 3px;
-  box-shadow: inset 0 0 0 1px var(--text);
+.is-idle .import-form input {
+  height: 60px;
 }
 
 .primary-button,
@@ -132,12 +235,37 @@ summary:focus-visible {
   background: var(--text);
   color: #fff;
   font-weight: 800;
+  transition:
+    background-color 120ms linear,
+    color 120ms linear,
+    transform 90ms linear;
+}
+
+.is-idle .import-form button {
+  height: 60px;
+  min-height: 60px;
+}
+
+.is-workspace .import-form button {
+  height: 46px;
 }
 
 .primary-button:hover:not(:disabled),
 .import-form button:hover:not(:disabled) {
   background: var(--surface);
   color: var(--text);
+}
+
+.primary-button:active:not(:disabled),
+.import-form button:active:not(:disabled),
+.submit-button:active:not(:disabled),
+.preview-tabs button:active:not(:disabled),
+.media-fallback button:active:not(:disabled) {
+  transform: translate(2px, 2px);
+}
+
+.status-region {
+  animation: status-reveal 180ms var(--motion-cut) both;
 }
 
 .message {
@@ -149,6 +277,7 @@ summary:focus-visible {
   background: var(--surface);
   font-size: 13px;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .message.error {
@@ -167,13 +296,20 @@ summary:focus-visible {
   margin-top: 20px;
 }
 
+.is-analyzing .analysis {
+  opacity: 0.4;
+  pointer-events: none;
+  transition: opacity 160ms linear;
+}
+
 .form-heading {
   margin-right: 5px;
   padding: 24px;
   border: 2px solid var(--line-strong);
   background: var(--surface);
   box-shadow: var(--shadow-lg);
-  scroll-margin-top: 84px;
+  scroll-margin-top: var(--anchor-offset);
+  animation: slab-reveal 300ms var(--motion-cut) both;
 }
 
 .form-heading h1 {
@@ -183,6 +319,7 @@ summary:focus-visible {
   font-weight: 900;
   line-height: 1.2;
   letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
 }
 
 .form-heading > p {
@@ -191,6 +328,7 @@ summary:focus-visible {
   color: var(--muted);
   line-height: 1.65;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .result-layout {
@@ -203,11 +341,12 @@ summary:focus-visible {
 .result-nav {
   min-width: 0;
   padding-top: 30px;
+  animation: fade-reveal 180ms 120ms linear both;
 }
 
 .result-nav nav {
   position: sticky;
-  top: 86px;
+  top: calc(var(--compact-search-height) + 12px);
   display: grid;
   gap: 0;
   border: 2px solid var(--text);
@@ -235,6 +374,9 @@ summary:focus-visible {
   font-size: 13px;
   line-height: 1.35;
   text-decoration: none;
+  transition:
+    background-color 100ms linear,
+    color 100ms linear;
 }
 
 .result-nav a:hover {
@@ -259,6 +401,7 @@ summary:focus-visible {
 
 .result-main {
   min-width: 0;
+  animation: surface-reveal 320ms 70ms var(--motion-cut) both;
 }
 
 .section-block,
@@ -267,7 +410,7 @@ summary:focus-visible {
 .submission-panel,
 .question-item,
 .content-item {
-  scroll-margin-top: 88px;
+  scroll-margin-top: var(--anchor-offset);
 }
 
 .section-block {
@@ -291,6 +434,7 @@ summary:focus-visible {
   font-weight: 900;
   line-height: 1.35;
   letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
 }
 
 .section-heading p,
@@ -338,6 +482,7 @@ summary:focus-visible {
   font-weight: 900;
   line-height: 1.45;
   letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
 }
 
 .question-description,
@@ -408,6 +553,7 @@ summary:focus-visible {
   padding: 10px 8px 10px 2px;
   border-bottom: 1px solid var(--line-soft);
   line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 
 .option:last-child {
@@ -470,6 +616,9 @@ summary:focus-visible {
   padding: 10px 12px;
   font-weight: 800;
   line-height: 1.4;
+  transition:
+    background-color 100ms linear,
+    color 100ms linear;
 }
 
 .technical-details[open] summary {
@@ -497,7 +646,7 @@ summary:focus-visible {
 }
 
 .option .media-image {
-  max-width: 320px;
+  max-width: min(100%, 320px);
   max-height: 220px;
   margin-top: 8px;
 }
@@ -621,6 +770,11 @@ table {
   resize: none;
 }
 
+.percent-input:focus-within input,
+.percent-input:focus-within > span {
+  background: var(--focus-fill);
+}
+
 .rule-editor .wide-field {
   grid-column: 1 / -1;
 }
@@ -651,6 +805,7 @@ table {
   margin-top: 3px;
   padding-top: 12px;
   border-top: 1px solid var(--line-soft);
+  animation: insert-reveal 180ms var(--motion-cut) both;
 }
 
 .percent-input {
@@ -740,6 +895,10 @@ table {
   border-right: 1px solid var(--text);
   background: var(--surface);
   color: var(--text);
+  transition:
+    background-color 100ms linear,
+    color 100ms linear,
+    transform 90ms linear;
 }
 
 .preview-tabs button:last-child {
@@ -750,6 +909,11 @@ table {
   background: var(--text);
   color: var(--surface);
   font-weight: 900;
+}
+
+.preview-panel,
+.submission-panel {
+  animation: insert-reveal 220ms var(--motion-cut) both;
 }
 
 .individual-list {
@@ -826,6 +990,7 @@ table {
   font-size: 16px;
   font-weight: 900;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .summary-card > header span {
@@ -1063,6 +1228,10 @@ table {
   background: var(--soft);
 }
 
+.temporal-list span {
+  overflow-wrap: anywhere;
+}
+
 .temporal-list b {
   min-width: 28px;
   padding: 4px 7px;
@@ -1113,13 +1282,74 @@ table {
   font-size: 12px;
 }
 
-.diagnostic-block {
-  padding-bottom: 16px;
+@keyframes search-scan {
+  0% {
+    transform: scaleX(0);
+  }
+
+  100% {
+    transform: scaleX(1);
+  }
 }
 
-.diagnostic-block > .message {
-  margin-right: 16px;
-  margin-left: 16px;
+@keyframes slab-reveal {
+  from {
+    opacity: 0;
+    clip-path: inset(0 0 100% 0);
+    transform: translateY(18px);
+  }
+
+  to {
+    opacity: 1;
+    clip-path: inset(0);
+    transform: none;
+  }
+}
+
+@keyframes surface-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-reveal {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes status-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes insert-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .sr-only {
@@ -1135,6 +1365,11 @@ table {
 }
 
 @media (max-width: 820px) {
+  :root {
+    --compact-search-height: 68px;
+    --anchor-offset: 118px;
+  }
+
   .workbench {
     width: min(100% - 24px, 760px);
     padding-bottom: 56px;
@@ -1144,8 +1379,8 @@ table {
     padding: 10px 0;
   }
 
-  .form-heading {
-    scroll-margin-top: 72px;
+  .is-idle .search-region {
+    padding: 0 0 28px;
   }
 
   .result-layout {
@@ -1155,7 +1390,7 @@ table {
   .result-nav {
     position: sticky;
     z-index: 15;
-    top: 70px;
+    top: var(--compact-search-height);
     margin: 18px 3px 0 0;
     padding: 0 3px 3px 0;
     overflow-x: auto;
@@ -1168,6 +1403,7 @@ table {
     display: flex;
     width: max-content;
     gap: 0;
+    box-shadow: none;
   }
 
   .result-nav p {
@@ -1186,13 +1422,17 @@ table {
     display: contents;
   }
 
+  .section-links a {
+    max-width: min(72vw, 260px);
+  }
+
   .section-block,
   .generation-panel,
   .preview-panel,
   .submission-panel,
   .question-item,
   .content-item {
-    scroll-margin-top: 118px;
+    scroll-margin-top: var(--anchor-offset);
   }
 
   .section-block {
@@ -1207,6 +1447,22 @@ table {
 }
 
 @media (max-width: 620px) {
+  .brand-stage {
+    height: clamp(270px, 47svh, 430px);
+  }
+
+  .brand-clip {
+    padding-bottom: 16px;
+  }
+
+  .brand-wordmark {
+    display: grid;
+    gap: 0.08em;
+    font-size: clamp(66px, 26vw, 108px);
+    line-height: 0.72;
+    white-space: normal;
+  }
+
   .import-form {
     grid-template-columns: minmax(0, 1fr) 86px;
   }
@@ -1230,6 +1486,26 @@ table {
   .other-answer-editor,
   .generation-controls {
     grid-template-columns: 1fr;
+  }
+
+  .rule-editor input,
+  .rule-editor select,
+  .field input,
+  .field select {
+    height: 44px;
+  }
+
+  .technical-details summary {
+    min-height: 42px;
+  }
+
+  .media-image {
+    max-height: min(520px, 70dvh);
+  }
+
+  .individual-list {
+    max-height: none;
+    overflow-y: visible;
   }
 
   .pie-layout {
@@ -1287,5 +1563,43 @@ table {
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  .form-heading,
+  .result-main,
+  .result-nav,
+  .status-region,
+  .other-answer-editor,
+  .preview-panel,
+  .submission-panel {
+    opacity: 1;
+    clip-path: none;
+    transform: none;
+  }
+
+  .is-analyzing .search-region::after {
+    animation: none !important;
+    transform: scaleX(1);
+  }
+}
+
+@media (forced-colors: active) {
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  button:focus-visible,
+  a:focus-visible,
+  summary:focus-visible {
+    outline: 2px solid CanvasText;
+    outline-offset: 2px;
   }
 }

@@ -3,23 +3,23 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://form-swarm.ccomet.chatgpt.site"),
-  title: "Google Forms 응답 테스트",
+  title: "FORM SWARM — Google Forms 응답 테스트",
   description: "Google Forms 구조 분석, 가상 응답 생성 및 제출 테스트 도구",
   openGraph: {
-    title: "Google Forms 응답 테스트",
+    title: "FORM SWARM — Google Forms 응답 테스트",
     description: "Google Forms 구조 분석, 가상 응답 생성 및 제출 테스트 도구",
     images: [{
-      url: "/og-brutalist-v2.png",
+      url: "/og-form-swarm.png",
       width: 1_672,
       height: 941,
-      alt: "FormSwarm 흑백 브루탈리즘 분석 및 응답 미리보기 화면",
+      alt: "FORM SWARM 흑백 브루탈리즘 워드마크와 폼 분석 패널",
     }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Google Forms 응답 테스트",
+    title: "FORM SWARM — Google Forms 응답 테스트",
     description: "Google Forms 구조 분석, 가상 응답 생성 및 제출 테스트 도구",
-    images: ["/og-brutalist-v2.png"],
+    images: ["/og-form-swarm.png"],
   },
 };
 

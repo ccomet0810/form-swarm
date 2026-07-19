@@ -629,6 +629,7 @@ export function Workbench() {
   const [responses, setResponses] = useState<GeneratedResponse[]>([]);
   const [count, setCount] = useState(10);
   const [analyzing, setAnalyzing] = useState(false);
+  const [hasLaunched, setHasLaunched] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -650,6 +651,7 @@ export function Workbench() {
   async function analyzeForm(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!url.trim() || busy) return;
+    setHasLaunched(true);
     setAnalyzing(true);
     setError(null);
     setMessage(null);
@@ -669,7 +671,7 @@ export function Workbench() {
       setSubmission(null);
       setManualTextQuestionIds(new Set());
       setRuleIssue(null);
-      setMessage("분석 완료");
+      setMessage(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "폼을 분석하지 못했습니다.");
     } finally {
@@ -847,7 +849,16 @@ export function Workbench() {
   const skippedItems = form?.diagnostics.skippedItems ?? [];
 
   return (
-    <main className="workbench">
+    <main className={`workbench ${hasLaunched ? "is-workspace" : "is-idle"}${analyzing ? " is-analyzing" : ""}`}>
+      <div className="brand-stage" aria-hidden={hasLaunched}>
+        <div className="brand-clip">
+          <h1 className="brand-wordmark" aria-label="Form Swarm">
+            <span>FORM</span>
+            <span>SWARM</span>
+          </h1>
+        </div>
+      </div>
+
       <div className="search-region">
         <form className="import-form" onSubmit={analyzeForm}>
           <label className="sr-only" htmlFor="form-url">Google Forms 링크</label>
@@ -870,12 +881,25 @@ export function Workbench() {
         </form>
       </div>
 
-      {error && <p className="message error" role="alert">{error}</p>}
-      {message && <p className="message success" role="status" aria-live="polite">{message}</p>}
-      {formIsStale && <p className="message stale" role="status">입력한 링크가 현재 분석 결과와 다릅니다. 검색한 뒤 생성하거나 제출할 수 있습니다.</p>}
+      {(error || formIsStale || message) && (
+        <div className="status-region">
+          {error ? (
+            <p className="message error" role="alert">{error}</p>
+          ) : formIsStale ? (
+            <p className="message stale" role="status">입력한 링크가 현재 분석 결과와 다릅니다. 검색한 뒤 생성하거나 제출할 수 있습니다.</p>
+          ) : message ? (
+            <p className="message success" role="status" aria-live="polite">{message}</p>
+          ) : null}
+        </div>
+      )}
 
       {form && (
-        <section className="analysis" aria-label="Google Forms 분석 결과">
+        <section
+          className="analysis"
+          key={`${form.source.publicId}:${form.source.fetchedAt}`}
+          aria-label="Google Forms 분석 결과"
+          aria-busy={analyzing}
+        >
           <div className="form-heading" id="form-overview">
             <h1>{form.title || "제목 없는 설문지"}</h1>
             {form.description && <p>{form.description}</p>}
