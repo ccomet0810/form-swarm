@@ -1137,10 +1137,9 @@ export function Workbench() {
             </aside>
 
             <div className="result-main">
-              <section className="section-block" id="analysis-items">
-                <div className="section-heading">
+              <section className="analysis-section" id="analysis-items">
+                <div className="analysis-section-heading">
                   <h2>문항 및 콘텐츠</h2>
-                  <span className="section-heading-rule-label" aria-hidden="true">생성 설정</span>
                 </div>
                 <fieldset className="item-list analysis-fields" disabled={busy || formIsStale}>
                   {form.items?.map((item) => item.kind === "question" ? (
