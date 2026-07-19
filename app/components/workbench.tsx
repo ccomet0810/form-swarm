@@ -21,19 +21,27 @@ import { createDefaultRules } from "../../lib/generator/rules";
 import { validateGeneratedResponse } from "../../lib/generator/validation";
 import { ResponseSummaryCard } from "./response-summary";
 
-const TYPE_LABEL: Record<QuestionType, string> = {
-  short_text: "단답형",
-  paragraph: "장문형",
-  single_choice: "객관식",
-  dropdown: "드롭다운",
-  checkboxes: "체크박스",
-  scale: "선형 배율",
-  grid_single: "객관식 그리드",
-  grid_checkbox: "체크박스 그리드",
-  rating: "등급",
-  date: "날짜",
-  time: "시간",
-  unknown: "미지원 유형",
+// These are Google Forms API v1 union member names derived from our normalized
+// responder-HTML type. They are mappings, not fields read from a Forms API response.
+const GOOGLE_FORMS_API_TYPE: Record<QuestionType, {
+  itemMember: "questionItem" | "questionGroupItem";
+  questionMember: "choiceQuestion" | "textQuestion" | "scaleQuestion" | "dateQuestion" | "timeQuestion" | "ratingQuestion" | "rowQuestion" | null;
+  choiceType?: "RADIO" | "CHECKBOX" | "DROP_DOWN";
+  paragraph?: boolean;
+  groupMember?: "grid";
+}> = {
+  short_text: { itemMember: "questionItem", questionMember: "textQuestion", paragraph: false },
+  paragraph: { itemMember: "questionItem", questionMember: "textQuestion", paragraph: true },
+  single_choice: { itemMember: "questionItem", questionMember: "choiceQuestion", choiceType: "RADIO" },
+  dropdown: { itemMember: "questionItem", questionMember: "choiceQuestion", choiceType: "DROP_DOWN" },
+  checkboxes: { itemMember: "questionItem", questionMember: "choiceQuestion", choiceType: "CHECKBOX" },
+  scale: { itemMember: "questionItem", questionMember: "scaleQuestion" },
+  grid_single: { itemMember: "questionGroupItem", questionMember: "rowQuestion", choiceType: "RADIO", groupMember: "grid" },
+  grid_checkbox: { itemMember: "questionGroupItem", questionMember: "rowQuestion", choiceType: "CHECKBOX", groupMember: "grid" },
+  rating: { itemMember: "questionItem", questionMember: "ratingQuestion" },
+  date: { itemMember: "questionItem", questionMember: "dateQuestion" },
+  time: { itemMember: "questionItem", questionMember: "timeQuestion" },
+  unknown: { itemMember: "questionItem", questionMember: null },
 };
 
 interface SubmissionProgress {
@@ -113,10 +121,10 @@ function AutoGrowTextarea({
   );
 }
 
-function TechnicalDetails({ children }: { children: React.ReactNode }) {
+function InfoDetails({ children }: { children: React.ReactNode }) {
   return (
-    <details className="technical-details">
-      <summary>기술 정보</summary>
+    <details className="info-details">
+      <summary>정보</summary>
       <dl className="question-meta">{children}</dl>
     </details>
   );
@@ -131,21 +139,45 @@ function answerLabel(answer: GeneratedAnswer | undefined): string {
     .join(" · ");
 }
 
-function navigationLabel(target: FormNavigationTarget | null | undefined): string {
-  if (!target || target.kind === "next") return "다음 섹션";
-  if (target.kind === "submit") return "양식 제출";
-  if (target.kind === "section") return `섹션 ${target.sectionItemId}`;
-  return `알 수 없음 (${target.rawValue})`;
+function navigationValue(target: FormNavigationTarget | null | undefined): string {
+  if (!target || target.kind === "next") return "kind=next";
+  if (target.kind === "submit") return "kind=submit";
+  if (target.kind === "section") return `kind=section · sectionItemId=${target.sectionItemId}`;
+  return `kind=unknown · rawValue=${target.rawValue}`;
 }
 
 function validationLabel(validation: FormValidation): string {
   if (validation.kind === "number_range") {
-    return `${validation.operator === "between" ? "숫자 범위" : "숫자 범위 제외"}: ${validation.min} ~ ${validation.max}${validation.errorMessage ? ` / ${validation.errorMessage}` : ""}`;
+    return `kind=${validation.kind} · operator=${validation.operator} · min=${validation.min} · max=${validation.max}${validation.errorMessage ? ` · errorMessage=${JSON.stringify(validation.errorMessage)}` : ""}`;
   }
   if (validation.kind === "text_length") {
-    return `글자 수 ${validation.operator === "min" ? "최소" : "최대"} ${validation.value}${validation.errorMessage ? ` / ${validation.errorMessage}` : ""}`;
+    return `kind=${validation.kind} · operator=${validation.operator} · value=${validation.value}${validation.errorMessage ? ` · errorMessage=${JSON.stringify(validation.errorMessage)}` : ""}`;
   }
-  return `선택 수 ${validation.operator === "exact" ? "정확히" : validation.operator === "min" ? "최소" : "최대"} ${validation.value}${validation.errorMessage ? ` / ${validation.errorMessage}` : ""}`;
+  return `kind=${validation.kind} · operator=${validation.operator} · value=${validation.value}${validation.errorMessage ? ` · errorMessage=${JSON.stringify(validation.errorMessage)}` : ""}`;
+}
+
+function QuestionTypeInfo({ question }: { question: FormQuestion }) {
+  const apiType = GOOGLE_FORMS_API_TYPE[question.type];
+  const apiMembers = [
+    `Item.${apiType.itemMember}`,
+    apiType.groupMember ? `QuestionGroupItem.${apiType.groupMember}` : null,
+    apiType.questionMember ? `Question.${apiType.questionMember}` : null,
+  ].filter((value): value is string => value !== null);
+  return (
+    <>
+      <dt>FormQuestion.type</dt><dd>{question.type}</dd>
+      <dt>Google Forms API</dt><dd>{apiMembers.join(" → ")}</dd>
+      {apiType.choiceType && (
+        <>
+          <dt>{apiType.groupMember ? "Grid.columns.type" : "ChoiceQuestion.type"}</dt>
+          <dd>{apiType.choiceType}</dd>
+        </>
+      )}
+      {typeof apiType.paragraph === "boolean" && (
+        <><dt>TextQuestion.paragraph</dt><dd>{String(apiType.paragraph)}</dd></>
+      )}
+    </>
+  );
 }
 
 function ImageView({ image, className = "media-image" }: { image: FormImageRef; className?: string }) {
@@ -636,13 +668,16 @@ function QuestionView({
   return (
     <article className="question-item" id={`question-${question.id}`}>
       <div className="question-title-row">
-        <h3>{question.title || "제목 없음"}</h3>
+        <h3>
+          {question.title || "제목 없음"}
+          {question.required && (
+            <>
+              <span className="required-mark" aria-hidden="true">*</span>
+              <span className="sr-only"> (필수)</span>
+            </>
+          )}
+        </h3>
       </div>
-
-      <p className="item-byline">
-        <span>유형: {TYPE_LABEL[question.type]}</span>
-        <span>필수: {question.required ? "O" : "X"}</span>
-      </p>
 
       {question.description && <p className="question-description">{question.description}</p>}
 
@@ -659,46 +694,54 @@ function QuestionView({
         issue={issue}
       />
 
-      <TechnicalDetails>
-        <dt>item ID</dt><dd>{question.itemId}</dd>
-        <dt>entry ID</dt>
-        <dd>{question.entryIds.length > 0 ? question.entryIds.map((id) => <div key={id}>{id}</div>) : "없음"}</dd>
-        <dt>section ID</dt><dd>{question.sectionId}</dd>
-        <dt>원본 유형</dt><dd>{question.rawType}</dd>
+      <InfoDetails>
+        <QuestionTypeInfo question={question} />
+        <dt>FormQuestion.required</dt><dd>{String(question.required)}</dd>
+        <dt>FormQuestion.itemId</dt><dd>{question.itemId}</dd>
+        <dt>FormQuestion.entryIds</dt>
+        <dd>{question.entryIds.length > 0 ? question.entryIds.map((id) => <div key={id}>{id}</div>) : "[]"}</dd>
+        <dt>FormQuestion.sectionId</dt><dd>{question.sectionId}</dd>
+        <dt>FormQuestion.rawType</dt><dd>{question.rawType}</dd>
         {(question.validations ?? []).length > 0 && (
-          <><dt>응답 검증</dt><dd>{question.validations?.map((validation, index) => <div key={`${validation.kind}-${index}`}>{validationLabel(validation)}</div>)}</dd></>
+          <><dt>FormQuestion.validations</dt><dd>{question.validations?.map((validation, index) => <div key={`${validation.kind}-${index}`}>{validationLabel(validation)}</div>)}</dd></>
         )}
         {question.scale && (
-          <><dt>배율</dt><dd>{question.scale.min} ~ {question.scale.max} / 낮은 값: {question.scale.lowLabel ?? "없음"} / 높은 값: {question.scale.highLabel ?? "없음"}</dd></>
+          <>
+            <dt>ScaleQuestion.low</dt><dd>{question.scale.min}</dd>
+            <dt>ScaleQuestion.high</dt><dd>{question.scale.max}</dd>
+            <dt>ScaleQuestion.lowLabel</dt><dd>{question.scale.lowLabel ?? "null"}</dd>
+            <dt>ScaleQuestion.highLabel</dt><dd>{question.scale.highLabel ?? "null"}</dd>
+          </>
         )}
         {question.rating && (
-          <><dt>등급</dt><dd>{question.rating.min} ~ {question.rating.max} / 표시: {question.rating.icon}</dd></>
+          <>
+            <dt>RatingQuestion.ratingScaleLevel</dt><dd>{question.rating.max}</dd>
+            <dt>FormQuestion.rating.icon</dt><dd>{question.rating.icon}</dd>
+            {question.rating.icon !== "unknown" && (
+              <><dt>RatingQuestion.iconType</dt><dd>{question.rating.icon === "thumbs_up" ? "THUMB_UP" : question.rating.icon.toUpperCase()}</dd></>
+            )}
+          </>
         )}
         {question.date && (
-          <><dt>날짜 옵션</dt><dd>연도 {question.date.includeYear ? "포함" : "제외"}, 시간 {question.date.includeTime ? "포함" : "제외"}</dd></>
+          <>
+            <dt>DateQuestion.includeYear</dt><dd>{String(question.date.includeYear)}</dd>
+            <dt>DateQuestion.includeTime</dt><dd>{String(question.date.includeTime)}</dd>
+          </>
         )}
         {question.time && (
-          <><dt>시간 옵션</dt><dd>{question.time.kind === "duration" ? "기간" : "시각"}</dd></>
-        )}
-        {question.options.some((option) => option.value !== option.label || option.branchTarget) && (
           <>
-            <dt>선택지 제출값</dt>
-            <dd>{question.options.map((option, index) => (
-              <div key={`${option.index ?? index}:${option.value}`}>
-                {option.label}: {option.value}{option.branchTarget ? ` / ${navigationLabel(option.branchTarget)}` : ""}
-              </div>
-            ))}</dd>
+            <dt>TimeQuestion.duration</dt><dd>{String(question.time.kind === "duration")}</dd>
           </>
         )}
         {question.grid && (
           <>
-            <dt>행 entry ID</dt>
+            <dt>FormQuestion.grid.rows[].entryId</dt>
             <dd>{question.grid.rows.map((row) => <div key={row.id}>{row.label}: {row.entryId ?? row.id}</div>)}</dd>
-            <dt>열 ID</dt>
+            <dt>FormQuestion.grid.columns[].id</dt>
             <dd>{question.grid.columns.map((column) => <div key={column.id}>{column.label}: {column.id}</div>)}</dd>
           </>
         )}
-      </TechnicalDetails>
+      </InfoDetails>
     </article>
   );
 }
@@ -706,45 +749,55 @@ function QuestionView({
 function ContentView({ item }: { item: Exclude<FormItem, { kind: "question" }> }) {
   if (item.kind === "section") {
     return (
-      <article className="content-item section-item" id={`item-${item.itemId}`}>
-        <h3>{item.title || "제목 없는 섹션"}</h3>
-        <p className="item-byline"><span>유형: 섹션</span></p>
+      <div className="content-item section-item" id={`item-${item.itemId}`}>
+        {item.title && <h3>{item.title}</h3>}
         {item.description && <p>{item.description}</p>}
-        <TechnicalDetails>
-          <dt>item ID</dt><dd>{item.itemId}</dd>
-          <dt>다음 이동</dt><dd>{navigationLabel(item.navigation)}</dd>
-        </TechnicalDetails>
-      </article>
+        <InfoDetails>
+          <dt>FormItem.kind</dt><dd>{item.kind}</dd>
+          <dt>Google Forms API</dt><dd>Item.pageBreakItem</dd>
+          <dt>FormItem.itemId</dt><dd>{item.itemId}</dd>
+          <dt>FormItem.rawType</dt><dd>{item.rawType}</dd>
+          <dt>FormSectionItem.navigation</dt><dd>{navigationValue(item.navigation)}</dd>
+        </InfoDetails>
+      </div>
     );
   }
 
   if (item.kind === "text_block") {
     return (
-      <article className="content-item" id={`item-${item.itemId}`}>
-        <h3>{item.title || "제목 없는 설명"}</h3>
-        <p className="item-byline"><span>유형: 제목 및 설명</span></p>
+      <div className="content-item" id={`item-${item.itemId}`}>
+        {item.title && <h3>{item.title}</h3>}
         {item.description && <p>{item.description}</p>}
-        <TechnicalDetails><dt>item ID</dt><dd>{item.itemId}</dd></TechnicalDetails>
-      </article>
+        <InfoDetails>
+          <dt>FormItem.kind</dt><dd>{item.kind}</dd>
+          <dt>Google Forms API</dt><dd>Item.textItem</dd>
+          <dt>FormItem.itemId</dt><dd>{item.itemId}</dd>
+          <dt>FormItem.rawType</dt><dd>{item.rawType}</dd>
+        </InfoDetails>
+      </div>
     );
   }
 
   if (item.kind === "image") {
     return (
-      <article className="content-item" id={`item-${item.itemId}`}>
-        <h3>{item.title || item.image.altText || "이미지"}</h3>
-        <p className="item-byline"><span>유형: 이미지</span></p>
+      <div className="content-item" id={`item-${item.itemId}`}>
+        {item.title && <h3>{item.title}</h3>}
         {item.description && <p>{item.description}</p>}
         <ImageView image={item.image} />
-        <TechnicalDetails><dt>item ID</dt><dd>{item.itemId}</dd><dt>이미지 ID</dt><dd>{item.image.sourceId}</dd></TechnicalDetails>
-      </article>
+        <InfoDetails>
+          <dt>FormItem.kind</dt><dd>{item.kind}</dd>
+          <dt>Google Forms API</dt><dd>Item.imageItem</dd>
+          <dt>FormItem.itemId</dt><dd>{item.itemId}</dd>
+          <dt>FormItem.rawType</dt><dd>{item.rawType}</dd>
+          <dt>FormImageRef.sourceId</dt><dd>{item.image.sourceId}</dd>
+        </InfoDetails>
+      </div>
     );
   }
 
   return (
-    <article className="content-item" id={`item-${item.itemId}`}>
-      <h3>{item.title || "동영상"}</h3>
-      <p className="item-byline"><span>유형: 동영상</span></p>
+    <div className="content-item" id={`item-${item.itemId}`}>
+      {item.title && <h3>{item.title}</h3>}
       {item.description && <p>{item.description}</p>}
       <iframe
         className="video-frame"
@@ -754,8 +807,14 @@ function ContentView({ item }: { item: Exclude<FormItem, { kind: "question" }> }
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen
       />
-      <TechnicalDetails><dt>item ID</dt><dd>{item.itemId}</dd><dt>video ID</dt><dd>{item.video.videoId}</dd></TechnicalDetails>
-    </article>
+      <InfoDetails>
+        <dt>FormItem.kind</dt><dd>{item.kind}</dd>
+        <dt>Google Forms API</dt><dd>Item.videoItem</dd>
+        <dt>FormItem.itemId</dt><dd>{item.itemId}</dd>
+        <dt>FormItem.rawType</dt><dd>{item.rawType}</dd>
+        <dt>FormVideoRef.videoId</dt><dd>{item.video.videoId}</dd>
+      </InfoDetails>
+    </div>
   );
 }
 
@@ -1120,12 +1179,13 @@ export function Workbench() {
                   <div className="item-list">
                     {skippedItems.map((item) => (
                       <article className="content-item" key={item.itemId}>
-                        <h3>{item.title || "파일 업로드"}</h3>
-                        <p className="item-byline"><span>유형: 파일 업로드 · 지원 제외</span></p>
-                        <TechnicalDetails>
-                          <dt>item ID</dt><dd>{item.itemId}</dd>
-                          <dt>원본 유형</dt><dd>{item.rawType}</dd>
-                        </TechnicalDetails>
+                        {item.title && <h3>{item.title}</h3>}
+                        <InfoDetails>
+                          <dt>Google Forms API</dt><dd>Item.questionItem → Question.fileUploadQuestion</dd>
+                          <dt>SkippedFormItem.itemId</dt><dd>{item.itemId}</dd>
+                          <dt>SkippedFormItem.rawType</dt><dd>{item.rawType}</dd>
+                          <dt>SkippedFormItem.reason</dt><dd>{item.reason}</dd>
+                        </InfoDetails>
                       </article>
                     ))}
                   </div>
