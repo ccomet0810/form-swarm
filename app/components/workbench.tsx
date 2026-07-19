@@ -495,13 +495,23 @@ function RuleEditor({
   issue?: RuleIssue;
 }) {
   if (!rule || rule.kind === "unsupported") {
-    return <div className="rule-editor"><span>자동 생성 제외</span></div>;
+    return (
+      <div className="rule-editor compact-rule-editor">
+        <div className="static-rule-field">
+          <span>생성 방식</span>
+          <strong>자동 생성 제외</strong>
+        </div>
+      </div>
+    );
   }
 
   if (question.type === "date" || question.type === "time") {
     return (
-      <div className="rule-editor">
-        <span>{question.type === "date" ? "날짜 자동 생성" : "시간 자동 생성"}</span>
+      <div className="rule-editor compact-rule-editor">
+        <div className="static-rule-field">
+          <span>생성 방식</span>
+          <strong>{question.type === "date" ? "날짜 자동 생성" : "시간 자동 생성"}</strong>
+        </div>
       </div>
     );
   }
@@ -510,7 +520,10 @@ function RuleEditor({
     if (textSource === "rules") {
       return (
         <div className="rule-editor compact-rule-editor">
-          <span>자동 생성</span>
+          <div className="static-rule-field">
+            <span>생성 방식</span>
+            <strong>자동 생성</strong>
+          </div>
         </div>
       );
     }
@@ -1137,8 +1150,8 @@ export function Workbench() {
             </aside>
 
             <div className="result-main">
-              <section className="analysis-section" id="analysis-items">
-                <div className="analysis-section-heading">
+              <section className="workflow-section analysis-section" id="analysis-items">
+                <div className="workflow-heading">
                   <h2>문항 및 콘텐츠</h2>
                 </div>
                 <fieldset className="item-list analysis-fields" disabled={busy || formIsStale}>
@@ -1169,8 +1182,8 @@ export function Workbench() {
               </section>
 
               {skippedItems.length > 0 && (
-                <section className="section-block">
-                  <div className="section-heading"><h2>제외된 항목</h2></div>
+                <section className="workflow-section excluded-section">
+                  <div className="workflow-heading"><h2>제외된 항목</h2></div>
                   <div className="item-list">
                     {skippedItems.map((item) => (
                       <article className="content-item" key={item.itemId}>
@@ -1187,9 +1200,9 @@ export function Workbench() {
                 </section>
               )}
 
-              <section className="generation-panel" id="response-generation">
-                <div className="panel-heading">
-                  <h2>가상 응답 생성</h2>
+              <section className="workflow-section generation-panel" id="response-generation">
+                <div className="workflow-heading">
+                  <h2>응답 생성</h2>
                 </div>
                 <div className="generation-controls">
                   <label htmlFor="response-count">
@@ -1208,8 +1221,8 @@ export function Workbench() {
               </section>
 
               {responses.length > 0 && (
-                <section className="preview-panel" id="response-preview">
-                  <div className="panel-heading">
+                <section className="workflow-section preview-panel" id="response-preview">
+                  <div className="workflow-heading">
                     <h2>미리보기</h2>
                   </div>
                   <div className="preview-tabs" aria-label="미리보기 방식">
@@ -1242,8 +1255,8 @@ export function Workbench() {
               )}
 
               {responses.length > 0 && (
-                <section className="submission-panel" id="response-submit">
-                  <div className="panel-heading">
+                <section className="workflow-section submission-panel" id="response-submit">
+                  <div className="workflow-heading">
                     <h2>실제 제출</h2>
                   </div>
                   {!allResponsesValid && <p className="message error">유효하지 않은 응답이 있어 제출할 수 없습니다.</p>}
