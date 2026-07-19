@@ -467,16 +467,6 @@ summary:focus-visible {
   color: var(--surface);
 }
 
-.content-label {
-  margin: 0 0 10px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 900;
-}
-
 .answer-preview {
   margin-top: 16px;
 }
@@ -910,7 +900,7 @@ svg.rating-glyph {
 }
 
 .grid-table-wrap {
-  margin-top: 17px;
+  margin-top: 0;
   overflow-x: auto;
 }
 

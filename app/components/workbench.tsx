@@ -227,7 +227,6 @@ function QuestionAnswerPreview({ question }: { question: FormQuestion }) {
     const markerType = question.type === "grid_checkbox" ? "checkbox" : "radio";
     return (
       <div className="answer-preview answer-preview--grid">
-        <p className="content-label">행과 열</p>
         <div className="grid-table-wrap">
           <table className="grid-table answer-grid">
             <caption className="sr-only">{question.title}의 행과 열</caption>
@@ -264,7 +263,6 @@ function QuestionAnswerPreview({ question }: { question: FormQuestion }) {
     const markerType = question.type === "checkboxes" ? "checkbox" : "radio";
     return (
       <div className={`answer-preview answer-preview--${question.type}`}>
-        <p className="content-label">선택지</p>
         <ul className="answer-options" aria-label={`${question.title} 선택지`}>
           {question.options.map((option, index) => (
             <li className="answer-option" key={`${option.index ?? index}:${option.value}`}>
@@ -280,7 +278,6 @@ function QuestionAnswerPreview({ question }: { question: FormQuestion }) {
   if (question.type === "dropdown") {
     return (
       <div className="answer-preview answer-preview--dropdown">
-        <p className="content-label">선택지</p>
         <div className="answer-dropdown-shell" aria-hidden="true">
           <span>항목 선택</span>
           <span className="answer-dropdown-chevron" />
@@ -381,7 +378,6 @@ function QuestionAnswerPreview({ question }: { question: FormQuestion }) {
   if (question.options.length > 0) {
     return (
       <div className="answer-preview">
-        <p className="content-label">선택지</p>
         <ul className="answer-options answer-options--plain" aria-label={`${question.title} 선택지`}>
           {question.options.map((option, index) => (
             <li className="answer-option" key={`${option.index ?? index}:${option.value}`}>
