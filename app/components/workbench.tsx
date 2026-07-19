@@ -71,11 +71,15 @@ function AutoGrowTextarea({
   value,
   onValueChange,
   ariaDescribedBy,
+  placeholder,
+  invalid = false,
 }: {
   id: string;
   value: string;
   onValueChange: (value: string) => void;
   ariaDescribedBy?: string;
+  placeholder?: string;
+  invalid?: boolean;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -102,6 +106,8 @@ function AutoGrowTextarea({
       rows={3}
       value={value}
       aria-describedby={ariaDescribedBy}
+      aria-invalid={invalid || undefined}
+      placeholder={placeholder}
       onChange={(event) => onValueChange(event.target.value)}
     />
   );
@@ -183,7 +189,6 @@ function OtherAnswerEditor({
   if (!question.options.some((option) => option.isOther)) return null;
   const other = rule.other ?? { enabled: false, probability: 0.15, samples: [] };
   const fieldId = `other-pool-${question.id}`;
-  const noteId = `other-pool-note-${question.id}`;
 
   return (
     <div className="other-answer-editor">
@@ -238,16 +243,15 @@ function OtherAnswerEditor({
             <AutoGrowTextarea
               id={fieldId}
               value={other.samples.join("\n")}
-              ariaDescribedBy={issue?.fieldId === fieldId ? `${noteId} ${fieldId}-error` : noteId}
+              ariaDescribedBy={issue?.fieldId === fieldId ? `${fieldId}-error` : undefined}
+              invalid={issue?.fieldId === fieldId}
+              placeholder="한 줄에 응답 하나"
               onValueChange={(value) => onChange({
                 ...rule,
                 other: { ...other, samples: value.split(/\r?\n/) },
               })}
             />
           </label>
-          <p className="field-note" id={noteId}>
-            한 줄이 응답 하나입니다. 사용 가능한 문구 {usableOtherLines(question, other.samples).length}개
-          </p>
           {issue?.fieldId === fieldId && (
             <p className="inline-error" id={`${fieldId}-error`} role="alert">{issue.message}</p>
           )}
@@ -290,13 +294,12 @@ function RuleEditor({
       return (
         <div className="rule-editor compact-rule-editor">
           <p className="rule-heading">생성 설정</p>
-          <p className="rule-note">검증 조건에 맞춰 자동으로 생성합니다.</p>
+          <span>자동 생성</span>
         </div>
       );
     }
 
     const fieldId = `text-pool-${question.id}`;
-    const noteId = `text-pool-note-${question.id}`;
     return (
       <div className="rule-editor">
         <p className="rule-heading">생성 설정</p>
@@ -310,16 +313,16 @@ function RuleEditor({
             <option value="manual">직접 입력 목록</option>
           </select>
         </label>
-        {textSource === "ai" ? (
-          <p className="rule-note">응답 생성 버튼을 누를 때 문항에 맞는 문구를 새로 만듭니다.</p>
-        ) : (
+        {textSource === "manual" && (
           <>
             <label className="wide-field" htmlFor={fieldId}>
               응답 문구
               <AutoGrowTextarea
                 id={fieldId}
                 value={rule.samples.join("\n")}
-                ariaDescribedBy={issue?.fieldId === fieldId ? `${noteId} ${fieldId}-error` : noteId}
+                ariaDescribedBy={issue?.fieldId === fieldId ? `${fieldId}-error` : undefined}
+                invalid={issue?.fieldId === fieldId}
+                placeholder="한 줄에 응답 하나"
                 onValueChange={(value) => onChange({
                   ...rule,
                   mode: "sample_pool",
@@ -327,9 +330,6 @@ function RuleEditor({
                 })}
               />
             </label>
-            <p className="field-note" id={noteId}>
-              한 줄이 응답 하나입니다. 생성할 때 목록에서 무작위로 선택합니다. 사용 가능한 문구 {nonEmptyLines(rule.samples).length}개
-            </p>
             {issue?.fieldId === fieldId && (
               <p className="inline-error" id={`${fieldId}-error`} role="alert">{issue.message}</p>
             )}
@@ -860,7 +860,7 @@ export function Workbench() {
       </div>
 
       <div className="search-region">
-        <form className="import-form" onSubmit={analyzeForm}>
+        <form className="import-form" onSubmit={analyzeForm} aria-busy={analyzing}>
           <label className="sr-only" htmlFor="form-url">Google Forms 링크</label>
           <input
             id="form-url"
@@ -881,13 +881,13 @@ export function Workbench() {
         </form>
       </div>
 
-      {(error || formIsStale || message) && (
+      {(error || formIsStale || (!form && message)) && (
         <div className="status-region">
           {error ? (
             <p className="message error" role="alert">{error}</p>
           ) : formIsStale ? (
             <p className="message stale" role="status">입력한 링크가 현재 분석 결과와 다릅니다. 검색한 뒤 생성하거나 제출할 수 있습니다.</p>
-          ) : message ? (
+          ) : !form && message ? (
             <p className="message success" role="status" aria-live="polite">{message}</p>
           ) : null}
         </div>
@@ -933,7 +933,6 @@ export function Workbench() {
               <section className="section-block" id="analysis-items">
                 <div className="section-heading">
                   <h2>문항 및 콘텐츠</h2>
-                  <p>폼에 표시되는 순서입니다. 선택지와 생성 설정은 문항마다 바로 확인할 수 있습니다.</p>
                 </div>
                 <fieldset className="item-list analysis-fields" disabled={busy || formIsStale}>
                   {form.items?.map((item) => item.kind === "question" ? (
@@ -982,11 +981,13 @@ export function Workbench() {
 
               <section className="generation-panel" id="response-generation">
                 <div className="panel-heading">
-                  <div><h2>가상 응답 생성</h2><p>문항별 생성 설정을 사용합니다.</p></div>
+                  <h2>가상 응답 생성</h2>
                 </div>
-                <label className="generation-label" htmlFor="response-count">생성 개수</label>
                 <div className="generation-controls">
-                  <input id="response-count" type="number" min={1} max={500} value={count} disabled={busy || formIsStale} onChange={(event) => setCount(Number(event.target.value))} />
+                  <label htmlFor="response-count">
+                    생성 개수
+                    <input id="response-count" type="number" min={1} max={500} value={count} disabled={busy || formIsStale} onChange={(event) => setCount(Number(event.target.value))} />
+                  </label>
                   <button className="primary-button" type="button" disabled={busy || formIsStale} onClick={() => void generate()}>
                     {generating ? "생성 중" : "응답 생성"}
                   </button>
@@ -1001,7 +1002,7 @@ export function Workbench() {
               {responses.length > 0 && (
                 <section className="preview-panel" id="response-preview">
                   <div className="panel-heading">
-                    <div><h2>미리보기</h2><p>{responses.length}개 응답</p></div>
+                    <h2>미리보기</h2>
                   </div>
                   <div className="preview-tabs" aria-label="미리보기 방식">
                     <button type="button" aria-pressed={previewTab === "summary"} onClick={() => setPreviewTab("summary")}>요약</button>
@@ -1035,7 +1036,7 @@ export function Workbench() {
               {responses.length > 0 && (
                 <section className="submission-panel" id="response-submit">
                   <div className="panel-heading">
-                    <div><h2>실제 제출</h2><p>생성된 응답을 한 개씩 Google Forms에 제출합니다. 시작 전에 한 번 더 확인합니다.</p></div>
+                    <h2>실제 제출</h2>
                   </div>
                   {!allResponsesValid && <p className="message error">유효하지 않은 응답이 있어 제출할 수 없습니다.</p>}
                   <button
