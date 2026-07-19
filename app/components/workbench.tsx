@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Circle, Heart, Star, ThumbsUp } from "lucide-react";
 import type {
   FormImageRef,
   FormItem,
@@ -232,14 +233,14 @@ function QuestionAnswerPreview({ question }: { question: FormQuestion }) {
             <caption className="sr-only">{question.title}의 행과 열</caption>
             <thead>
               <tr>
-                <th>행</th>
-                {question.grid.columns.map((column) => <th key={column.id}>{column.label}</th>)}
+                <th scope="col">행</th>
+                {question.grid.columns.map((column) => <th scope="col" key={column.id}>{column.label}</th>)}
               </tr>
             </thead>
             <tbody>
               {question.grid.rows.map((row) => (
                 <tr key={row.id}>
-                  <th>{row.label}</th>
+                  <th scope="row">{row.label}</th>
                   {question.grid?.columns.map((column) => (
                     <td key={column.id}>
                       <span className={`answer-mark answer-mark--${markerType}`} aria-hidden="true" />
@@ -303,7 +304,6 @@ function QuestionAnswerPreview({ question }: { question: FormQuestion }) {
     );
     return (
       <div className="answer-preview answer-preview--scale">
-        <p className="content-label">응답 형식</p>
         <div className="scale-preview-scroll">
           <div className="scale-preview">
             <span className="scale-edge-label">{question.scale.lowLabel ?? ""}</span>
@@ -327,22 +327,26 @@ function QuestionAnswerPreview({ question }: { question: FormQuestion }) {
       { length: question.rating.max - question.rating.min + 1 },
       (_, index) => question.rating!.min + index,
     );
-    const glyph = question.rating.icon === "heart"
-      ? "♡"
+    const RatingIcon = question.rating.icon === "heart"
+      ? Heart
       : question.rating.icon === "thumbs_up"
-        ? "👍"
+        ? ThumbsUp
         : question.rating.icon === "star"
-          ? "☆"
-          : "○";
+          ? Star
+          : Circle;
     return (
       <div className="answer-preview answer-preview--rating">
-        <p className="content-label">응답 형식</p>
         <div className="rating-preview-scroll">
           <ol className="rating-preview" aria-label={`${question.title} 등급`}>
             {values.map((value) => (
               <li className="rating-point" key={value}>
-                <span className="rating-glyph" aria-hidden="true">{glyph}</span>
                 <span>{value}</span>
+                <RatingIcon
+                  className="rating-glyph"
+                  size={24}
+                  strokeWidth={1.75}
+                  aria-hidden="true"
+                />
               </li>
             ))}
           </ol>
@@ -354,15 +358,8 @@ function QuestionAnswerPreview({ question }: { question: FormQuestion }) {
   if (question.type === "short_text" || question.type === "paragraph") {
     return (
       <div className={`answer-preview answer-preview--${question.type}`}>
-        <p className="content-label">응답 형식</p>
         <div className={`text-answer-preview text-answer-preview--${question.type}`}>
           <span>{question.type === "short_text" ? "단답형 응답" : "장문형 응답"}</span>
-          {question.type === "paragraph" && (
-            <>
-              <i aria-hidden="true" />
-              <i aria-hidden="true" />
-            </>
-          )}
         </div>
       </div>
     );
@@ -376,7 +373,6 @@ function QuestionAnswerPreview({ question }: { question: FormQuestion }) {
       : question.time?.kind === "duration" ? "시간 : 분 : 초" : "HH : MM";
     return (
       <div className={`answer-preview answer-preview--${question.type}`}>
-        <p className="content-label">응답 형식</p>
         <div className="temporal-answer-preview">{placeholder}</div>
       </div>
     );
@@ -781,7 +777,6 @@ function ContentView({ item }: { item: Exclude<FormItem, { kind: "question" }> }
   if (item.kind === "image") {
     return (
       <div className="content-item" id={`item-${item.itemId}`}>
-        {item.title && <h3>{item.title}</h3>}
         {item.description && <p>{item.description}</p>}
         <ImageView image={item.image} />
         <InfoDetails>

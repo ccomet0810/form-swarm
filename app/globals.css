@@ -605,16 +605,14 @@ summary:focus-visible {
 
 .text-answer-preview--paragraph {
   width: 100%;
-  min-height: 88px;
-  padding-bottom: 0;
-  border-bottom: 0;
+  min-height: 42px;
+  padding: 0 2px 8px;
+  border-bottom: 1px solid var(--muted);
 }
 
-.text-answer-preview--paragraph > span,
-.text-answer-preview--paragraph > i {
-  min-height: 20px;
-  border-bottom: 1px solid var(--line-soft);
-  font-style: normal;
+.text-answer-preview--paragraph > span {
+  min-height: 0;
+  border: 0;
 }
 
 .temporal-answer-preview {
@@ -630,30 +628,45 @@ summary:focus-visible {
 .scale-preview-scroll,
 .rating-preview-scroll {
   overflow-x: auto;
+  overscroll-behavior-inline: contain;
   scrollbar-width: thin;
 }
 
 .scale-preview {
   display: grid;
-  min-width: 480px;
-  grid-template-columns: minmax(70px, 1fr) auto minmax(70px, 1fr);
-  gap: 14px;
+  width: min(100%, 640px);
+  min-width: max-content;
+  margin-inline: auto;
+  grid-template-columns:
+    minmax(56px, max-content)
+    minmax(max-content, 1fr)
+    minmax(56px, max-content);
+  gap: 12px;
   align-items: end;
-  padding: 8px 2px 4px;
+  padding: 8px 2px 6px;
 }
 
 .scale-edge-label {
-  padding-bottom: 2px;
+  align-self: end;
+  padding-bottom: 3px;
   color: var(--muted);
   font-size: 12px;
-  text-align: center;
+  line-height: 1.35;
   overflow-wrap: anywhere;
+}
+
+.scale-edge-label:first-child {
+  text-align: left;
+}
+
+.scale-edge-label:last-child {
+  text-align: right;
 }
 
 .scale-points,
 .rating-preview {
   display: flex;
-  gap: 20px;
+  gap: 0;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -662,35 +675,93 @@ summary:focus-visible {
 .scale-point,
 .rating-point {
   display: grid;
+  flex: 1 0 40px;
   justify-items: center;
   gap: 8px;
   color: var(--muted);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.scale-point {
+  flex-basis: 36px;
 }
 
 .rating-preview {
-  width: max-content;
-  min-width: 100%;
-  justify-content: flex-start;
-  gap: 14px;
-  padding: 5px 2px 2px;
+  width: min(100%, 640px);
+  min-width: max-content;
+  margin-inline: auto;
+  padding: 6px 2px 4px;
 }
 
 .rating-point {
-  min-width: 44px;
-  gap: 4px;
+  flex-basis: 56px;
+  grid-template-rows: auto 24px;
+  gap: 7px;
 }
 
 .rating-glyph {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  order: 2;
   color: var(--text);
-  font-size: 31px;
-  font-family: Arial, sans-serif;
+  font-size: 0;
   line-height: 1;
-  filter: grayscale(1);
+}
+
+.rating-point > :not(.rating-glyph) {
+  order: 1;
+}
+
+.rating-glyph svg,
+svg.rating-glyph {
+  display: block;
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.answer-grid {
+  border: 0;
+}
+
+.grid-table.answer-grid th,
+.grid-table.answer-grid td {
+  padding: 11px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  background: transparent;
+}
+
+.grid-table.answer-grid thead th {
+  padding-top: 7px;
+  padding-bottom: 9px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.grid-table.answer-grid tbody th {
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.answer-grid tbody tr:nth-child(even) {
+  background: var(--soft);
+}
+
+.answer-grid tbody tr:last-child > * {
+  border-bottom: 0;
 }
 
 .answer-grid td {
-  height: 48px;
+  height: 50px;
 }
 
 .answer-grid .answer-mark {
