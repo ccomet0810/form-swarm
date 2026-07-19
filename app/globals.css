@@ -388,6 +388,24 @@ summary:focus-visible {
   color: var(--surface);
 }
 
+#analysis-items > .section-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  align-items: stretch;
+}
+
+.section-heading-rule-label {
+  display: flex;
+  align-items: center;
+  margin-block: -14px;
+  padding: 14px 0 14px 20px;
+  border-left: 1px solid #686864;
+  color: #d8d8d4;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
 .section-heading h2,
 .panel-heading h2 {
   margin: 0;
@@ -426,6 +444,26 @@ summary:focus-visible {
   padding: 20px;
   border: 2px solid var(--text);
   background: var(--surface);
+}
+
+.question-layout {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) 300px;
+}
+
+.question-content,
+.question-rule-panel {
+  min-width: 0;
+}
+
+.question-content {
+  padding-right: 20px;
+}
+
+.question-rule-panel {
+  padding-left: 20px;
+  border-left: 1px solid var(--line-soft);
 }
 
 .question-title-row h3,
@@ -947,16 +985,18 @@ table {
   font-size: 12px;
 }
 
-.compact-rule-editor {
+.question-rule-panel .rule-editor {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
   align-items: start;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
-.rule-heading {
-  grid-column: 1 / -1;
-  margin: 0;
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 900;
+.compact-rule-editor {
+  align-items: start;
 }
 
 .rule-editor label,
@@ -1030,6 +1070,10 @@ table {
   padding-top: 12px;
   border-top: 1px solid var(--line-soft);
   animation: insert-reveal 180ms var(--motion-cut) both;
+}
+
+.question-rule-panel .other-answer-editor {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .percent-input {
@@ -1657,6 +1701,29 @@ table {
 
   .is-idle .search-region {
     padding: 0 0 28px;
+  }
+
+  #analysis-items > .section-heading {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .section-heading-rule-label {
+    display: none;
+  }
+
+  .question-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .question-content {
+    padding-right: 0;
+  }
+
+  .question-rule-panel {
+    margin-top: 18px;
+    padding: 18px 0 0;
+    border-top: 1px solid var(--line-soft);
+    border-left: 0;
   }
 
   .section-block,

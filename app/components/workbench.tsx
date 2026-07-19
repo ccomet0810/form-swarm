@@ -495,13 +495,12 @@ function RuleEditor({
   issue?: RuleIssue;
 }) {
   if (!rule || rule.kind === "unsupported") {
-    return <div className="rule-editor"><p className="rule-heading">생성 설정</p><span>자동 생성 제외</span></div>;
+    return <div className="rule-editor"><span>자동 생성 제외</span></div>;
   }
 
   if (question.type === "date" || question.type === "time") {
     return (
       <div className="rule-editor">
-        <p className="rule-heading">생성 설정</p>
         <span>{question.type === "date" ? "날짜 자동 생성" : "시간 자동 생성"}</span>
       </div>
     );
@@ -511,7 +510,6 @@ function RuleEditor({
     if (textSource === "rules") {
       return (
         <div className="rule-editor compact-rule-editor">
-          <p className="rule-heading">생성 설정</p>
           <span>자동 생성</span>
         </div>
       );
@@ -520,7 +518,6 @@ function RuleEditor({
     const fieldId = `text-pool-${question.id}`;
     return (
       <div className="rule-editor">
-        <p className="rule-heading">생성 설정</p>
         <label>
           생성 방식
           <select
@@ -561,7 +558,6 @@ function RuleEditor({
     const options = question.options.filter((option) => !option.isOther);
     return (
       <div className="rule-editor">
-        <p className="rule-heading">생성 설정</p>
         <label>
           생성 방식
           <select
@@ -599,7 +595,6 @@ function RuleEditor({
     const maximum = Math.max(1, question.options.filter((option) => !option.isOther).length + (rule.other?.enabled ? 1 : 0));
     return (
       <div className="rule-editor">
-        <p className="rule-heading">생성 설정</p>
         <label>
           최소 선택 수
           <input
@@ -627,7 +622,6 @@ function RuleEditor({
 
   return (
     <div className="rule-editor">
-      <p className="rule-heading">생성 설정</p>
       <label>
         생성 방식
         <select
@@ -659,32 +653,42 @@ function QuestionView({
 }) {
   return (
     <article className="question-item" id={`question-${question.id}`}>
-      <div className="question-title-row">
-        <h3>
-          {question.title || "제목 없음"}
-          {question.required && (
-            <>
-              <span className="required-mark" aria-hidden="true">*</span>
-              <span className="sr-only"> (필수)</span>
-            </>
-          )}
-        </h3>
+      <div className="question-layout">
+        <div className="question-content">
+          <div className="question-title-row">
+            <h3>
+              {question.title || "제목 없음"}
+              {question.required && (
+                <>
+                  <span className="required-mark" aria-hidden="true">*</span>
+                  <span className="sr-only"> (필수)</span>
+                </>
+              )}
+            </h3>
+          </div>
+
+          {question.description && <p className="question-description">{question.description}</p>}
+
+          {(question.images ?? []).map((image) => <ImageView key={image.sourceId} image={image} />)}
+
+          <QuestionAnswerPreview question={question} />
+        </div>
+
+        <div
+          className="question-rule-panel"
+          role="group"
+          aria-label={`${question.title || "제목 없음"} 생성 설정`}
+        >
+          <RuleEditor
+            question={question}
+            rule={rule}
+            textSource={textSource}
+            onTextSourceChange={onTextSourceChange}
+            onChange={onRuleChange}
+            issue={issue}
+          />
+        </div>
       </div>
-
-      {question.description && <p className="question-description">{question.description}</p>}
-
-      {(question.images ?? []).map((image) => <ImageView key={image.sourceId} image={image} />)}
-
-      <QuestionAnswerPreview question={question} />
-
-      <RuleEditor
-        question={question}
-        rule={rule}
-        textSource={textSource}
-        onTextSourceChange={onTextSourceChange}
-        onChange={onRuleChange}
-        issue={issue}
-      />
 
       <InfoDetails>
         <QuestionTypeInfo question={question} />
@@ -1136,6 +1140,7 @@ export function Workbench() {
               <section className="section-block" id="analysis-items">
                 <div className="section-heading">
                   <h2>문항 및 콘텐츠</h2>
+                  <span className="section-heading-rule-label" aria-hidden="true">생성 설정</span>
                 </div>
                 <fieldset className="item-list analysis-fields" disabled={busy || formIsStale}>
                   {form.items?.map((item) => item.kind === "question" ? (
