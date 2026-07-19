@@ -19,9 +19,9 @@ const option = (input: {
 
 const choices = (...labels: string[]) => labels.map((label) => option({ label }));
 
-function ratingEntry(entryId: number, max: number, icon: number): RawArray {
+function ratingEntry(entryId: number, max: number, icon: number, slot = 14): RawArray {
   const entry: RawArray = [entryId, choices(...Array.from({ length: max }, (_, index) => String(index + 1))), 0];
-  entry[16] = [icon];
+  entry[slot] = [icon];
   return entry;
 }
 
@@ -139,7 +139,7 @@ export function advancedGoogleFormsFixtureHtml(): string {
     [109, "드롭다운", null, 3, [[209, choices("옵션 1", "옵션 2"), 0]]],
     [110, "선형 배율 0-10", null, 5, [[210, choices(...Array.from({ length: 11 }, (_, index) => String(index))), 0, ["", ""]]]],
     [111, "선형 배율 1-5", null, 5, [[211, choices("1", "2", "3", "4", "5"), 0, ["낮음", "높음"]]]],
-    [112, "별 등급", null, 18, [ratingEntry(212, 5, 1)]],
+    [112, "별 등급", null, 18, [ratingEntry(212, 5, 1, 16)]],
     [113, "하트 등급", null, 18, [ratingEntry(213, 10, 2)]],
     [114, "좋아요 등급", null, 18, [ratingEntry(214, 3, 3)]],
     uniqueGrid,

@@ -651,7 +651,9 @@ function mapQuestion(
   }
 
   if (type === "rating") {
-    const iconCode = asFiniteNumber(asArray(rawEntries[0]?.[16])[0]);
+    const iconCode =
+      asFiniteNumber(asArray(rawEntries[0]?.[14])[0]) ??
+      asFiniteNumber(asArray(rawEntries[0]?.[16])[0]);
     question.rating = {
       icon:
         iconCode === 1

@@ -175,6 +175,200 @@ function ImageView({ image, className = "media-image" }: { image: FormImageRef; 
   );
 }
 
+function AnswerOptionContent({
+  option,
+}: {
+  option: FormQuestion["options"][number];
+}) {
+  return (
+    <div className={`answer-option-content${option.isOther ? " answer-option-content--other" : ""}`}>
+      <span>{option.isOther ? "기타" : option.label}</span>
+      {option.isOther && <span className="answer-other-line" aria-hidden="true" />}
+      {option.image && <ImageView image={option.image} />}
+    </div>
+  );
+}
+
+function QuestionAnswerPreview({ question }: { question: FormQuestion }) {
+  if (question.grid) {
+    const markerType = question.type === "grid_checkbox" ? "checkbox" : "radio";
+    return (
+      <div className="answer-preview answer-preview--grid">
+        <p className="content-label">행과 열</p>
+        <div className="grid-table-wrap">
+          <table className="grid-table answer-grid">
+            <caption className="sr-only">{question.title}의 행과 열</caption>
+            <thead>
+              <tr>
+                <th>행</th>
+                {question.grid.columns.map((column) => <th key={column.id}>{column.label}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {question.grid.rows.map((row) => (
+                <tr key={row.id}>
+                  <th>{row.label}</th>
+                  {question.grid?.columns.map((column) => (
+                    <td key={column.id}>
+                      <span className={`answer-mark answer-mark--${markerType}`} aria-hidden="true" />
+                      <span className="sr-only">{row.label}에서 {column.label} 선택</span>
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="answer-constraint">
+          행별 응답 {question.grid.requireResponsePerRow ? "필수" : "선택"}
+          {question.grid.limitOneResponsePerColumn ? " / 열당 하나만 선택" : ""}
+        </p>
+      </div>
+    );
+  }
+
+  if (question.type === "single_choice" || question.type === "checkboxes") {
+    const markerType = question.type === "checkboxes" ? "checkbox" : "radio";
+    return (
+      <div className={`answer-preview answer-preview--${question.type}`}>
+        <p className="content-label">선택지</p>
+        <ul className="answer-options" aria-label={`${question.title} 선택지`}>
+          {question.options.map((option, index) => (
+            <li className="answer-option" key={`${option.index ?? index}:${option.value}`}>
+              <span className={`answer-mark answer-mark--${markerType}`} aria-hidden="true" />
+              <AnswerOptionContent option={option} />
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
+  if (question.type === "dropdown") {
+    return (
+      <div className="answer-preview answer-preview--dropdown">
+        <p className="content-label">선택지</p>
+        <div className="answer-dropdown-shell" aria-hidden="true">
+          <span>항목 선택</span>
+          <span className="answer-dropdown-chevron" />
+        </div>
+        <ol className="answer-options answer-options--dropdown" aria-label={`${question.title} 선택지`}>
+          {question.options.map((option, index) => (
+            <li className="answer-option" key={`${option.index ?? index}:${option.value}`}>
+              <span className="answer-option-index" aria-hidden="true">{index + 1}</span>
+              <AnswerOptionContent option={option} />
+            </li>
+          ))}
+        </ol>
+      </div>
+    );
+  }
+
+  if (question.type === "scale" && question.scale) {
+    const values = Array.from(
+      { length: question.scale.max - question.scale.min + 1 },
+      (_, index) => question.scale!.min + index,
+    );
+    return (
+      <div className="answer-preview answer-preview--scale">
+        <p className="content-label">응답 형식</p>
+        <div className="scale-preview-scroll">
+          <div className="scale-preview">
+            <span className="scale-edge-label">{question.scale.lowLabel ?? ""}</span>
+            <ol className="scale-points" aria-label={`${question.title} 배율`}>
+              {values.map((value) => (
+                <li className="scale-point" key={value}>
+                  <span>{value}</span>
+                  <span className="answer-mark answer-mark--radio" aria-hidden="true" />
+                </li>
+              ))}
+            </ol>
+            <span className="scale-edge-label">{question.scale.highLabel ?? ""}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (question.type === "rating" && question.rating) {
+    const values = Array.from(
+      { length: question.rating.max - question.rating.min + 1 },
+      (_, index) => question.rating!.min + index,
+    );
+    const glyph = question.rating.icon === "heart"
+      ? "♡"
+      : question.rating.icon === "thumbs_up"
+        ? "👍"
+        : question.rating.icon === "star"
+          ? "☆"
+          : "○";
+    return (
+      <div className="answer-preview answer-preview--rating">
+        <p className="content-label">응답 형식</p>
+        <div className="rating-preview-scroll">
+          <ol className="rating-preview" aria-label={`${question.title} 등급`}>
+            {values.map((value) => (
+              <li className="rating-point" key={value}>
+                <span className="rating-glyph" aria-hidden="true">{glyph}</span>
+                <span>{value}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </div>
+    );
+  }
+
+  if (question.type === "short_text" || question.type === "paragraph") {
+    return (
+      <div className={`answer-preview answer-preview--${question.type}`}>
+        <p className="content-label">응답 형식</p>
+        <div className={`text-answer-preview text-answer-preview--${question.type}`}>
+          <span>{question.type === "short_text" ? "단답형 응답" : "장문형 응답"}</span>
+          {question.type === "paragraph" && (
+            <>
+              <i aria-hidden="true" />
+              <i aria-hidden="true" />
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (question.type === "date" || question.type === "time") {
+    const placeholder = question.type === "date"
+      ? question.date?.includeTime
+        ? question.date.includeYear ? "YYYY-MM-DD  HH:MM" : "MM-DD  HH:MM"
+        : question.date?.includeYear ? "YYYY-MM-DD" : "MM-DD"
+      : question.time?.kind === "duration" ? "시간 : 분 : 초" : "HH : MM";
+    return (
+      <div className={`answer-preview answer-preview--${question.type}`}>
+        <p className="content-label">응답 형식</p>
+        <div className="temporal-answer-preview">{placeholder}</div>
+      </div>
+    );
+  }
+
+  if (question.options.length > 0) {
+    return (
+      <div className="answer-preview">
+        <p className="content-label">선택지</p>
+        <ul className="answer-options answer-options--plain" aria-label={`${question.title} 선택지`}>
+          {question.options.map((option, index) => (
+            <li className="answer-option" key={`${option.index ?? index}:${option.value}`}>
+              <span className="answer-option-index" aria-hidden="true">{index + 1}</span>
+              <AnswerOptionContent option={option} />
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
+  return null;
+}
+
 function OtherAnswerEditor({
   question,
   rule,
@@ -454,48 +648,7 @@ function QuestionView({
 
       {(question.images ?? []).map((image) => <ImageView key={image.sourceId} image={image} />)}
 
-      {question.options.length > 0 && (
-        <div className="choice-list">
-          <p className="content-label">선택지</p>
-          <ol className="options" aria-label={`${question.title} 선택지`}>
-          {question.options.map((option, index) => (
-            <li className="option" key={`${option.index ?? index}:${option.value}`}>
-              <div>
-                <span>{option.isOther ? "기타 (직접 입력)" : option.label}</span>
-                {option.image && <ImageView image={option.image} />}
-              </div>
-            </li>
-          ))}
-          </ol>
-        </div>
-      )}
-
-      {question.grid && (
-        <div className="grid-table-wrap">
-          <p className="content-label">행과 열</p>
-          <table className="grid-table">
-            <caption className="sr-only">{question.title}의 행과 열</caption>
-            <thead>
-              <tr>
-                <th>행</th>
-                {question.grid.columns.map((column) => <th key={column.id}>{column.label}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {question.grid.rows.map((row) => (
-                <tr key={row.id}>
-                  <th>{row.label}</th>
-                  {question.grid?.columns.map((column) => <td key={column.id}>선택</td>)}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="message">
-            행별 응답 {question.grid.requireResponsePerRow ? "필수" : "선택"}
-            {question.grid.limitOneResponsePerColumn ? " / 열당 하나만 선택" : ""}
-          </p>
-        </div>
-      )}
+      <QuestionAnswerPreview question={question} />
 
       <RuleEditor
         question={question}
