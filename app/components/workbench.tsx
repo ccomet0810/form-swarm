@@ -3,7 +3,6 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Circle, Heart, Search, Send, Sparkles, Star, ThumbsUp } from "lucide-react";
 import type {
   FormImageRef,
   FormItem,
@@ -20,6 +19,7 @@ import { constraintsForQuestion } from "../../lib/generator/constraints";
 import { generateResponses } from "../../lib/generator/engine";
 import { createDefaultRules } from "../../lib/generator/rules";
 import { matchesTextConstraints, validateGeneratedResponse } from "../../lib/generator/validation";
+import { QuestionHeading } from "./question-heading";
 import { ResponseSummaryCard } from "./response-summary";
 
 // These are Google Forms API v1 union member names derived from our normalized
@@ -62,6 +62,42 @@ type TextGenerationMode = "ai" | "manual";
 type PreviewTab = "summary" | "question" | "individual";
 type WorkspaceTab = "questions" | PreviewTab;
 type DisplayFormItem = FormQuestion | Exclude<FormItem, { kind: "section" }>;
+type HeaderPanel = "url" | "generate" | null;
+type MaterialSymbolName =
+  | "auto_awesome"
+  | "circle"
+  | "expand_more"
+  | "favorite"
+  | "link"
+  | "search"
+  | "send"
+  | "star"
+  | "thumb_up";
+
+function MaterialSymbol({
+  name,
+  filled = false,
+  size = 24,
+  className = "",
+}: {
+  name: MaterialSymbolName;
+  filled?: boolean;
+  size?: number;
+  className?: string;
+}) {
+  return (
+    <span
+      className={`material-symbol${className ? ` ${className}` : ""}`}
+      style={{
+        "--symbol-fill": filled ? 1 : 0,
+        "--symbol-size": `${size}px`,
+      } as React.CSSProperties}
+      aria-hidden="true"
+    >
+      {name}
+    </span>
+  );
+}
 
 function nonEmptyLines(values: string[]): string[] {
   return values.map((value) => value.trim()).filter(Boolean);
@@ -156,7 +192,10 @@ function AutoGrowTextarea({
 function InfoDetails({ children }: { children: React.ReactNode }) {
   return (
     <details className="info-details">
-      <summary>정보</summary>
+      <summary>
+        <MaterialSymbol name="expand_more" size={18} className="info-details-chevron" />
+        <span>정보</span>
+      </summary>
       <dl className="question-meta">{children}</dl>
     </details>
   );
@@ -341,7 +380,7 @@ function QuestionAnswerPreview({ question }: { question: FormQuestion }) {
       <div className="answer-preview answer-preview--dropdown">
         <div className="answer-dropdown-shell" aria-hidden="true">
           <span>항목 선택</span>
-          <span className="answer-dropdown-chevron" />
+          <MaterialSymbol name="expand_more" size={20} className="answer-dropdown-chevron" />
         </div>
         <ol className="answer-options answer-options--dropdown" aria-label={`${question.title} 선택지`}>
           {question.options.map((option, index) => (
@@ -388,13 +427,13 @@ function QuestionAnswerPreview({ question }: { question: FormQuestion }) {
       { length: question.rating.max - question.rating.min + 1 },
       (_, index) => question.rating!.min + index,
     );
-    const RatingIcon = question.rating.icon === "heart"
-      ? Heart
+    const ratingIcon = question.rating.icon === "heart"
+      ? "favorite"
       : question.rating.icon === "thumbs_up"
-        ? ThumbsUp
+        ? "thumb_up"
         : question.rating.icon === "star"
-          ? Star
-          : Circle;
+          ? "star"
+          : "circle";
     return (
       <div className="answer-preview answer-preview--rating">
         <div className="rating-preview-scroll">
@@ -406,11 +445,10 @@ function QuestionAnswerPreview({ question }: { question: FormQuestion }) {
             {values.map((value) => (
               <li className="rating-point" key={value}>
                 <span>{value}</span>
-                <RatingIcon
+                <MaterialSymbol
+                  name={ratingIcon}
                   className="rating-glyph"
                   size={24}
-                  strokeWidth={1.75}
-                  aria-hidden="true"
                 />
               </li>
             ))}
@@ -474,7 +512,7 @@ function ResponseNavigator({
 }) {
   const clampedIndex = Math.max(0, Math.min(total - 1, index));
   return (
-    <div className="response-navigator" aria-label={`${label} 이동`}>
+    <div className="response-navigator" role="group" aria-label={`${label} 이동`}>
       <button
         type="button"
         disabled={clampedIndex <= 0}
@@ -648,7 +686,7 @@ function QuestionResponsePanel({
   return (
     <div className="question-response-panel">
       <article className="question-response-title">
-        <h3>{question.title}</h3>
+        <QuestionHeading question={question} level={2} />
         <span>응답 {responses.filter((response) => hasGeneratedAnswer(response.answers[question.id])).length}개</span>
       </article>
       {values.length > 0 ? (
@@ -667,34 +705,63 @@ function QuestionResponsePanel({
   );
 }
 
+function FormOverview({
+  form,
+  status,
+}: {
+  form: ImportedForm;
+  status?: string;
+}) {
+  return (
+    <header className="form-heading" id="form-overview">
+      <div>
+        <h1>{form.title || "제목 없는 설문지"}</h1>
+        {form.description && <p>{form.description}</p>}
+      </div>
+      {status && <span className="form-heading-status" role="status" aria-live="polite">{status}</span>}
+    </header>
+  );
+}
+
+function SectionHeading({
+  section,
+  headingId,
+}: {
+  section: FormSection;
+  headingId: string;
+}) {
+  return (
+    <header className="section-heading">
+      <span className="section-marker" aria-hidden="true">
+        {String(section.index + 1).padStart(2, "0")}
+      </span>
+      <div>
+        <h2 id={headingId}>{section.title || `섹션 ${section.index + 1}`}</h2>
+        {section.description && <p>{section.description}</p>}
+      </div>
+    </header>
+  );
+}
+
 function IndividualResponsePanel({
   form,
   response,
-  valid,
 }: {
   form: ImportedForm;
   response: GeneratedResponse;
-  valid: boolean;
 }) {
   return (
-    <article className="individual-response-sheet">
-      <header>
-        <h3>{form.title || "제목 없는 설문지"}</h3>
-        {form.description && <p>{form.description}</p>}
-        {!valid && <span>검토 필요</span>}
-      </header>
+    <div className="individual-response-sheet">
       {form.sections.map((section) => {
         const questions = form.questions.filter((question) => question.sectionId === section.id);
         if (questions.length === 0) return null;
+        const headingId = `response-section-heading-${section.index + 1}`;
         return (
-          <section className="response-section" key={section.id}>
-            <header>
-              <h4>{section.title || `섹션 ${section.index + 1}`}</h4>
-              {section.description && <p>{section.description}</p>}
-            </header>
+          <section className="response-section" key={section.id} aria-labelledby={headingId}>
+            <SectionHeading section={section} headingId={headingId} />
             {questions.map((question) => (
               <div className="response-answer-card" key={question.id}>
-                <h5>{question.title}{question.required && <span aria-label="필수">*</span>}</h5>
+                <QuestionHeading question={question} level={3} />
                 {question.description && <p>{question.description}</p>}
                 <ReadonlyGeneratedAnswer question={question} answer={response.answers[question.id]} />
               </div>
@@ -702,7 +769,7 @@ function IndividualResponsePanel({
           </section>
         );
       })}
-    </article>
+    </div>
   );
 }
 
@@ -991,15 +1058,7 @@ function QuestionView({
       <div className="question-layout">
         <div className="question-content">
           <div className="question-title-row">
-            <h3>
-              {question.title || "제목 없음"}
-              {question.required && (
-                <>
-                  <span className="required-mark" aria-hidden="true">*</span>
-                  <span className="sr-only"> (필수)</span>
-                </>
-              )}
-            </h3>
+            <QuestionHeading question={question} level={3} />
           </div>
 
           {question.description && <p className="question-description">{question.description}</p>}
@@ -1093,15 +1152,7 @@ function FormSectionGroup({
       id={section.itemId ? `item-${section.itemId}` : undefined}
       aria-labelledby={headingId}
     >
-      <header className="section-rail">
-        <span className="section-marker" aria-hidden="true">
-          {String(section.index + 1).padStart(2, "0")}
-        </span>
-        <div>
-          <h3 id={headingId}>{section.title || `섹션 ${section.index + 1}`}</h3>
-          {section.description && <p>{section.description}</p>}
-        </div>
-      </header>
+      <SectionHeading section={section} headingId={headingId} />
       <div className="section-body item-list">{children}</div>
     </section>
   );
@@ -1185,6 +1236,7 @@ export function Workbench() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>("questions");
+  const [headerPanel, setHeaderPanel] = useState<HeaderPanel>(null);
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState(0);
   const [selectedResponseIndex, setSelectedResponseIndex] = useState(0);
   const [submission, setSubmission] = useState<SubmissionProgress | null>(null);
@@ -1193,6 +1245,8 @@ export function Workbench() {
   const [ruleIssue, setRuleIssue] = useState<RuleIssue | null>(null);
   const promptSuggestionRequestRef = useRef(0);
   const editedPromptIdsRef = useRef<Set<string>>(new Set());
+  const linkTriggerRef = useRef<HTMLButtonElement>(null);
+  const generateTriggerRef = useRef<HTMLButtonElement>(null);
   const busy = analyzing || generating || submitting;
   const formIsStale = Boolean(form && analyzedUrl !== url.trim());
 
@@ -1217,6 +1271,22 @@ export function Workbench() {
   const allResponsesValid = validationResults.every((result) => result.valid);
   const selectedQuestion = form?.questions[Math.max(0, Math.min(form.questions.length - 1, selectedQuestionIndex))] ?? null;
   const selectedResponse = responses[Math.max(0, Math.min(responses.length - 1, selectedResponseIndex))] ?? null;
+
+  function toggleHeaderPanel(panel: Exclude<HeaderPanel, null>) {
+    setHeaderPanel((current) => current === panel ? null : panel);
+  }
+
+  function handleHeaderPanelKeyDown(
+    event: React.KeyboardEvent<HTMLDivElement>,
+    panel: Exclude<HeaderPanel, null>,
+  ) {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    setHeaderPanel(null);
+    requestAnimationFrame(() => {
+      (panel === "url" ? linkTriggerRef : generateTriggerRef).current?.focus();
+    });
+  }
 
   function selectWorkspaceTab(tab: WorkspaceTab) {
     if (tab !== "questions" && responses.length === 0) return;
@@ -1293,6 +1363,8 @@ export function Workbench() {
 
     const promptSuggestionRequestId = promptSuggestionRequestRef.current + 1;
     promptSuggestionRequestRef.current = promptSuggestionRequestId;
+    const shouldRestoreLinkFocus = Boolean(form && headerPanel === "url");
+    let analyzedSuccessfully = false;
 
     try {
       const result = await fetch("/api/forms/import", {
@@ -1310,6 +1382,8 @@ export function Workbench() {
       setSelectedQuestionIndex(0);
       setSelectedResponseIndex(0);
       setWorkspaceTab("questions");
+      setHeaderPanel(null);
+      analyzedSuccessfully = true;
       editedPromptIdsRef.current = new Set();
       setTextGenerationModes(Object.fromEntries(
         payload.form.questions
@@ -1328,6 +1402,9 @@ export function Workbench() {
       setError(caught instanceof Error ? caught.message : "폼을 분석하지 못했습니다.");
     } finally {
       setAnalyzing(false);
+      if (analyzedSuccessfully && shouldRestoreLinkFocus) {
+        requestAnimationFrame(() => linkTriggerRef.current?.focus());
+      }
     }
   }
 
@@ -1478,6 +1555,7 @@ export function Workbench() {
     setResponses([]);
     setSubmission(null);
     promptSuggestionRequestRef.current += 1;
+    let generatedSuccessfully = false;
 
     try {
       const preparedRules = await rulesWithAiAnswers(requestedCount);
@@ -1487,12 +1565,17 @@ export function Workbench() {
       setWorkspaceTab("summary");
       setSelectedQuestionIndex(0);
       setSelectedResponseIndex(0);
+      setHeaderPanel(null);
+      generatedSuccessfully = true;
       setMessage(`${generated.length}개 응답 생성 완료`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "응답을 생성하지 못했습니다.");
       setMessage(null);
     } finally {
       setGenerating(false);
+      if (generatedSuccessfully) {
+        requestAnimationFrame(() => generateTriggerRef.current?.focus());
+      }
     }
   }
 
@@ -1501,6 +1584,7 @@ export function Workbench() {
     const formTitle = form.title || "제목 없는 설문지";
     if (!window.confirm(`“${formTitle}”에 ${responses.length}개 응답을 실제로 순차 제출합니다. 계속할까요?`)) return;
 
+    setHeaderPanel(null);
     setSubmitting(true);
     setError(null);
     setMessage("실제 제출 중");
@@ -1536,7 +1620,7 @@ export function Workbench() {
   const skippedItems = form?.diagnostics.skippedItems ?? [];
 
   return (
-    <main className={`workbench ${hasLaunched ? "is-workspace" : "is-idle"}${analyzing ? " is-analyzing" : ""}`}>
+    <main className={`workbench ${hasLaunched ? "is-workspace" : "is-idle"}${analyzing ? " is-analyzing" : ""}${headerPanel ? " has-header-panel" : ""}`}>
       <div className="brand-stage" aria-hidden={hasLaunched}>
         <div className="brand-clip">
           <h1 className="brand-wordmark" aria-label="Form Swarm">
@@ -1555,95 +1639,156 @@ export function Workbench() {
             </div>
           )}
 
-          <form className="import-form" onSubmit={analyzeForm} aria-busy={analyzing}>
-            <label className="sr-only" htmlFor="form-url">Google Forms 링크</label>
-            <input
-              id="form-url"
-              type="url"
-              value={url}
-              onChange={(event) => {
-                setUrl(event.target.value);
-                setError(null);
-                setMessage(null);
-                setRuleIssue(null);
-              }}
-              placeholder="Google Forms 링크"
-              maxLength={2_048}
-              disabled={busy}
-              required
-            />
-            <button
-              type="submit"
-              aria-label={analyzing ? "Google Forms 분석 중" : "Google Forms 검색"}
-              disabled={busy}
-            >
-              <Search aria-hidden="true" size={17} strokeWidth={2.2} />
-              <span>{analyzing ? "분석 중" : "검색"}</span>
-            </button>
-          </form>
+          {!form && (
+            <form className="import-form joined-control" onSubmit={analyzeForm} aria-busy={analyzing}>
+              <label className="sr-only" htmlFor="form-url">Google Forms 링크</label>
+              <input
+                id="form-url"
+                type="url"
+                value={url}
+                onChange={(event) => {
+                  setUrl(event.target.value);
+                  setError(null);
+                  setMessage(null);
+                  setRuleIssue(null);
+                }}
+                placeholder="Google Forms 링크"
+                maxLength={2_048}
+                disabled={busy}
+                required
+              />
+              <button
+                type="submit"
+                aria-label={analyzing ? "Google Forms 분석 중" : "Google Forms 검색"}
+                disabled={busy}
+              >
+                <MaterialSymbol name="search" size={20} />
+                <span>{analyzing ? "분석 중" : "검색"}</span>
+              </button>
+            </form>
+          )}
 
           {form && (
             <div className="workspace-actions">
-              <form
-                className="generation-control"
-                aria-busy={generating}
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void generate();
-                }}
-              >
-                <label className="sr-only" htmlFor="response-count">생성 개수</label>
-                <input
-                  id="response-count"
-                  type="number"
-                  min={1}
-                  max={500}
-                  required
-                  value={count}
-                  placeholder="생성 개수"
-                  disabled={busy || formIsStale}
-                  onChange={(event) => {
-                    const nextValue = event.target.value;
-                    setCount(nextValue === "" ? "" : Number(nextValue));
-                  }}
-                />
-                <button
-                  className="toolbar-generate"
-                  type="submit"
-                  disabled={busy || formIsStale || count === "" || count < 1 || count > 500}
-                >
-                  <Sparkles aria-hidden="true" size={17} strokeWidth={2.2} />
-                  <span className="action-label--wide">{generating ? "생성 중" : "응답 생성"}</span>
-                  <span className="action-label--compact">{generating ? "생성 중" : "생성"}</span>
-                </button>
-              </form>
               <button
-                className="toolbar-submit-button"
+                ref={linkTriggerRef}
+                className="header-icon-button"
+                type="button"
+                aria-label="Google Forms 링크 입력"
+                aria-controls={headerPanel === "url" ? "header-url-panel" : undefined}
+                aria-expanded={headerPanel === "url"}
+                title="링크 입력"
+                disabled={busy}
+                onClick={() => toggleHeaderPanel("url")}
+              >
+                <MaterialSymbol name="link" size={22} />
+              </button>
+              <button
+                ref={generateTriggerRef}
+                className="header-icon-button"
+                type="button"
+                aria-label={generating ? "응답 생성 중" : "응답 생성 설정"}
+                aria-controls={headerPanel === "generate" ? "header-generation-panel" : undefined}
+                aria-expanded={headerPanel === "generate"}
+                title="응답 생성"
+                disabled={busy || formIsStale}
+                onClick={() => toggleHeaderPanel("generate")}
+              >
+                <MaterialSymbol name="auto_awesome" size={22} />
+              </button>
+              <button
+                className="header-icon-button header-icon-button--primary"
                 type="button"
                 aria-label={responses.length > 0 ? `${responses.length}개 응답 실제 제출` : "실제 제출"}
+                title="실제 제출"
                 disabled={busy || formIsStale || responses.length === 0 || !allResponsesValid}
                 onClick={() => void submitSequentially()}
               >
-                <Send aria-hidden="true" size={17} strokeWidth={2.2} />
-                <span className="action-label--wide">
-                  {submitting
-                    ? `제출 ${submission?.done ?? 0}/${responses.length}`
-                    : responses.length > 0
-                      ? `${responses.length}개 실제 제출`
-                      : "실제 제출"}
-                </span>
-                <span className="action-label--compact">
-                  {submitting
-                    ? `${submission?.done ?? 0}/${responses.length}`
-                    : responses.length > 0
-                      ? `${responses.length}개 제출`
-                      : "제출"}
-                </span>
-                <span className="action-label--narrow">제출</span>
+                <MaterialSymbol name="send" size={22} filled />
               </button>
             </div>
           )}
         </div>
+
+        {form && headerPanel === "url" && (
+          <div
+            className="header-command-row"
+            id="header-url-panel"
+            onKeyDown={(event) => handleHeaderPanelKeyDown(event, "url")}
+          >
+            <form className="import-form joined-control header-command-form" onSubmit={analyzeForm} aria-busy={analyzing}>
+              <label className="sr-only" htmlFor="form-url">Google Forms 링크</label>
+              <input
+                id="form-url"
+                type="url"
+                value={url}
+                autoFocus
+                onChange={(event) => {
+                  setUrl(event.target.value);
+                  setError(null);
+                  setMessage(null);
+                  setRuleIssue(null);
+                }}
+                placeholder="Google Forms 링크"
+                maxLength={2_048}
+                disabled={busy}
+                required
+              />
+              <button
+                className="header-command-button"
+                type="submit"
+                aria-label={analyzing ? "Google Forms 분석 중" : "Google Forms 분석"}
+                title="분석"
+                disabled={busy}
+              >
+                <MaterialSymbol name="search" size={21} />
+              </button>
+            </form>
+          </div>
+        )}
+
+        {form && headerPanel === "generate" && (
+          <div
+            className="header-command-row"
+            id="header-generation-panel"
+            onKeyDown={(event) => handleHeaderPanelKeyDown(event, "generate")}
+          >
+            <form
+              className="generation-control joined-control header-command-form header-command-form--count"
+              aria-busy={generating}
+              onSubmit={(event) => {
+                event.preventDefault();
+                void generate();
+              }}
+            >
+              <label className="sr-only" htmlFor="response-count">생성 개수</label>
+              <input
+                id="response-count"
+                type="number"
+                min={1}
+                max={500}
+                required
+                value={count}
+                autoFocus
+                placeholder="생성 개수"
+                disabled={busy || formIsStale}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  setCount(nextValue === "" ? "" : Number(nextValue));
+                }}
+              />
+              <button
+                className="header-command-button"
+                type="submit"
+                aria-label={generating ? "응답 생성 중" : "응답 생성"}
+                title="응답 생성"
+                disabled={busy || formIsStale || count === "" || count < 1 || count > 500}
+              >
+                <MaterialSymbol name="auto_awesome" size={21} />
+              </button>
+            </form>
+          </div>
+        )}
 
         {form && (
           <div className="workspace-nav-row">
@@ -1709,12 +1854,12 @@ export function Workbench() {
           aria-label="Google Forms 분석 결과"
           aria-busy={analyzing}
         >
-          {workspaceTab !== "individual" && (
-            <div className="form-heading" id="form-overview">
-              <h1>{form.title || "제목 없는 설문지"}</h1>
-              {form.description && <p>{form.description}</p>}
-            </div>
-          )}
+          <FormOverview
+            form={form}
+            status={workspaceTab === "individual" && selectedResponse && !validationResults[selectedResponseIndex]?.valid
+              ? "검토 필요"
+              : undefined}
+          />
 
           {workspaceTab === "questions" && (
             <div
@@ -1802,7 +1947,7 @@ export function Workbench() {
                     )}
                   >
                     {form.questions.map((question) => (
-                      <option key={question.id} value={question.id}>{question.title}</option>
+                      <option key={question.id} value={question.id}>{question.title || "제목 없는 문항"}</option>
                     ))}
                   </select>
                 </label>
@@ -1835,7 +1980,6 @@ export function Workbench() {
               <IndividualResponsePanel
                 form={form}
                 response={selectedResponse}
-                valid={validationResults[selectedResponseIndex]?.valid ?? false}
               />
             </div>
           )}

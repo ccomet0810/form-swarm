@@ -8,6 +8,7 @@ import {
   type QuestionSummary,
   type SummaryValue,
 } from "../../lib/summary/aggregate";
+import { QuestionHeading } from "./question-heading";
 
 const CHART_COLORS = [
   "#0a0a0a",
@@ -267,7 +268,7 @@ export function ResponseSummaryCard({
   return (
     <article className="summary-card">
       <header>
-        <h3>{question.title || "제목 없는 문항"}</h3>
+        <QuestionHeading question={question} level={2} />
         <span>응답 {summary.responseCount}개</span>
       </header>
 
