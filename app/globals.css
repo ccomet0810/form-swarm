@@ -211,8 +211,9 @@ summary:focus-visible {
 }
 
 .is-workspace .header-primary.has-form {
-  display: flex;
+  display: grid;
   min-height: 64px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: 20px;
   padding: 9px 20px;
@@ -229,7 +230,7 @@ summary:focus-visible {
 
 .header-identity {
   display: grid;
-  flex: 0 1 220px;
+  justify-self: start;
   min-width: 150px;
   max-width: 220px;
   gap: 2px;
@@ -261,10 +262,9 @@ summary:focus-visible {
 }
 
 .is-workspace .header-primary.has-form .import-form {
-  flex: 1 1 520px;
-  width: min(42vw, 680px);
+  width: clamp(360px, calc(100vw - 840px), 680px);
   max-width: 680px;
-  min-width: 260px;
+  min-width: 0;
 }
 
 .import-form input,
@@ -392,44 +392,51 @@ summary:focus-visible {
 
 .workspace-actions {
   display: flex;
-  flex: 0 0 auto;
   min-width: 0;
-  min-height: 44px;
+  min-height: 46px;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
+  justify-self: end;
 }
 
-.toolbar-count {
-  display: flex;
+.generation-control {
+  display: grid;
   min-width: 0;
-  align-items: center;
-  gap: 8px;
-  height: 44px;
-  padding: 0 8px 0 10px;
-  border: 1px solid var(--line-soft);
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
+  grid-template-columns: 112px auto;
 }
 
-.toolbar-count input {
-  width: 48px;
+.generation-control input {
+  width: 112px;
   min-width: 0;
-  height: 32px;
-  padding: 0 5px;
-  border: 1px solid var(--text);
+  height: 46px;
+  padding: 0 11px;
+  border: var(--border-strong) solid var(--text);
+  border-right: 0;
   border-radius: 0;
   background: var(--surface);
   color: var(--text);
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
-  text-align: center;
+}
+
+.generation-control input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.generation-control input[type="number"] {
+  appearance: textfield;
+}
+
+.generation-control input::-webkit-inner-spin-button,
+.generation-control input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
 }
 
 .toolbar-generate,
 .toolbar-submit-button {
-  min-height: 44px;
+  min-height: 46px;
   padding: 0 13px;
   border: var(--border-strong) solid var(--text);
   border-radius: 0;
@@ -2261,10 +2268,10 @@ table {
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1200px) {
   :root {
-    --compact-search-height: 158px;
-    --anchor-offset: 174px;
+    --compact-search-height: 161px;
+    --anchor-offset: 177px;
   }
 
   .is-workspace .header-primary.has-form {
@@ -2397,19 +2404,26 @@ table {
   .workspace-actions {
     display: grid;
     width: 100%;
-    grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 6px;
-    margin-left: 0;
     justify-self: stretch;
   }
 
-  .toolbar-count {
-    justify-content: center;
-    padding-inline: 6px;
+  .generation-control {
+    width: 100%;
+    grid-template-columns: minmax(84px, 1fr) 112px;
   }
 
-  .toolbar-count input {
-    width: 42px;
+  .generation-control input {
+    width: 100%;
+  }
+
+  .generation-control .action-label--wide {
+    display: inline;
+  }
+
+  .generation-control .action-label--compact {
+    display: none;
   }
 
   .toolbar-generate,

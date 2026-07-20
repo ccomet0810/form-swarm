@@ -1205,7 +1205,7 @@ export function Workbench() {
   const [form, setForm] = useState<ImportedForm | null>(null);
   const [rules, setRules] = useState<GenerationRule[]>([]);
   const [responses, setResponses] = useState<GeneratedResponse[]>([]);
-  const [count, setCount] = useState(10);
+  const [count, setCount] = useState<number | "">(10);
   const [analyzing, setAnalyzing] = useState(false);
   const [hasLaunched, setHasLaunched] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -1622,28 +1622,39 @@ export function Workbench() {
 
           {form && (
             <div className="workspace-actions">
-              <label className="toolbar-count" htmlFor="response-count">
-                <span>생성 개수</span>
+              <form
+                className="generation-control"
+                aria-busy={generating}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void generate();
+                }}
+              >
+                <label className="sr-only" htmlFor="response-count">생성 개수</label>
                 <input
                   id="response-count"
                   type="number"
                   min={1}
                   max={500}
+                  required
                   value={count}
+                  placeholder="생성 개수"
                   disabled={busy || formIsStale}
-                  onChange={(event) => setCount(Number(event.target.value))}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    setCount(nextValue === "" ? "" : Number(nextValue));
+                  }}
                 />
-              </label>
-              <button
-                className="toolbar-generate"
-                type="button"
-                disabled={busy || formIsStale}
-                onClick={() => void generate()}
-              >
-                <Sparkles aria-hidden="true" size={17} strokeWidth={2.2} />
-                <span className="action-label--wide">{generating ? "생성 중" : "응답 생성"}</span>
-                <span className="action-label--compact">{generating ? "생성 중" : "생성"}</span>
-              </button>
+                <button
+                  className="toolbar-generate"
+                  type="submit"
+                  disabled={busy || formIsStale || count === "" || count < 1 || count > 500}
+                >
+                  <Sparkles aria-hidden="true" size={17} strokeWidth={2.2} />
+                  <span className="action-label--wide">{generating ? "생성 중" : "응답 생성"}</span>
+                  <span className="action-label--compact">{generating ? "생성 중" : "생성"}</span>
+                </button>
+              </form>
               <button
                 className="toolbar-submit-button"
                 type="button"
