@@ -23,7 +23,7 @@ export function UrlImportForm({
   const label = analyzing ? "Google Forms 분석 중" : "Google Forms 검색";
   return (
     <form
-      className={`import-form joined-control ${variant === "hero" ? "initial-import-form" : "header-command-form"}`}
+      className={`import-form command-field ${variant === "hero" ? "initial-import-form" : "header-command-form"}`}
       onSubmit={onSubmit}
       aria-busy={analyzing}
     >

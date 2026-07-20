@@ -18,7 +18,7 @@ describe("response navigator", () => {
     expect(markup).toContain('>chevron_left</span>');
     expect(markup).toContain('>chevron_right</span>');
     expect(markup).toContain('class="response-navigator-button icon-button icon-button--plain"');
-    expect(markup).toContain('class="control control--input control--editor response-index-input"');
+    expect(markup).toContain('class="control field-line control--text control--input control--editor response-index-input"');
     expect(markup).not.toContain('icon-button--outlined');
     expect(markup).toContain('value="2"');
     expect(markup).not.toContain('>이전</button>');

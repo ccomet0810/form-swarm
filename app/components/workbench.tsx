@@ -25,12 +25,15 @@ import {
   MIN_RESPONSE_COUNT,
 } from "../../lib/ui/response-count";
 import { HeaderCommandButton, HeaderCommandPanel, HeaderToolButton } from "./header-controls";
+import { FormItemCard, FormItemCopy } from "./form-item-card";
 import { AutoGrowTextarea, ControlInput, ControlSelect } from "./form-controls";
+import { InfoDetails } from "./info-details";
 import { MaterialSymbol } from "./material-symbol";
 import { QuestionHeading } from "./question-heading";
 import { ReadonlyAnswerField } from "./readonly-answer-field";
 import { ResponseNavigator } from "./response-navigator";
 import { ResponseSummaryCard } from "./response-summary";
+import { SectionHeading } from "./section-heading";
 import { UrlImportForm } from "./url-import-form";
 
 // These are Google Forms API v1 union member names derived from our normalized
@@ -113,24 +116,6 @@ function usableOtherLines(question: FormQuestion, values: string[]): string[] {
       (value) => value.length <= 20_000 && !regularValues.has(value),
     ),
   )];
-}
-
-function InfoDetails({
-  children,
-  variant = "inline",
-}: {
-  children: React.ReactNode;
-  variant?: "inline" | "card-row";
-}) {
-  return (
-    <details className={`info-details${variant === "card-row" ? " info-details--card-row" : ""}`}>
-      <summary>
-        <MaterialSymbol name="expand_more" size={18} className="info-details-chevron" />
-        <span>정보</span>
-      </summary>
-      <dl className="question-meta">{children}</dl>
-    </details>
-  );
 }
 
 function answerLabel(answer: GeneratedAnswer | undefined): string {
@@ -393,7 +378,7 @@ function QuestionAnswerPreview({ question }: { question: FormQuestion }) {
   if (question.type === "short_text" || question.type === "paragraph") {
     return (
       <div className={`answer-preview answer-preview--${question.type}`}>
-        <div className={`text-answer-preview text-answer-preview--${question.type}`}>
+        <div className={`field-line text-answer-preview text-answer-preview--${question.type}`}>
           <span>{question.type === "short_text" ? "단답형 응답" : "장문형 응답"}</span>
         </div>
       </div>
@@ -609,26 +594,6 @@ function FormOverview({
   );
 }
 
-function SectionHeading({
-  section,
-  headingId,
-}: {
-  section: FormSection;
-  headingId: string;
-}) {
-  return (
-    <header className="section-heading">
-      <span className="section-marker" aria-hidden="true">
-        {String(section.index + 1).padStart(2, "0")}
-      </span>
-      <div>
-        <h2 id={headingId}>{section.title || `섹션 ${section.index + 1}`}</h2>
-        {section.description && <p>{section.description}</p>}
-      </div>
-    </header>
-  );
-}
-
 function IndividualResponsePanel({
   form,
   response,
@@ -768,7 +733,7 @@ function RuleEditor({
     return (
       <div className="rule-editor compact-rule-editor">
         <div className="static-rule-field">
-          <span>생성 방식</span>
+          <span className="sr-only">생성 방식</span>
           <strong>자동 생성 제외</strong>
         </div>
       </div>
@@ -779,7 +744,7 @@ function RuleEditor({
     return (
       <div className="rule-editor compact-rule-editor">
         <div className="static-rule-field">
-          <span>생성 방식</span>
+          <span className="sr-only">생성 방식</span>
           <strong>{question.type === "date" ? "날짜 자동 생성" : "시간 자동 생성"}</strong>
         </div>
       </div>
@@ -791,7 +756,7 @@ function RuleEditor({
     return (
       <div className="rule-editor">
         <label>
-          생성 방식
+          <span className="sr-only">생성 방식</span>
           <ControlSelect
             value={textSource}
             onChange={(event) => onTextSourceChange(event.target.value as TextGenerationMode)}
@@ -802,12 +767,12 @@ function RuleEditor({
         </label>
         {textSource === "ai" && (
           <label className="wide-field ai-prompt-field" htmlFor={`ai-prompt-${question.id}`}>
-            AI 프롬프트
+            <span className="sr-only">AI 프롬프트</span>
             <AutoGrowTextarea
               id={`ai-prompt-${question.id}`}
               value={aiPrompt}
               maxLength={2_000}
-              placeholder="예: 간결하고 자연스러운 한국어 응답"
+              placeholder="AI 프롬프트"
               onValueChange={onAiPromptChange}
             />
           </label>
@@ -843,7 +808,7 @@ function RuleEditor({
     return (
       <div className="rule-editor">
         <label>
-          생성 방식
+          <span className="sr-only">생성 방식</span>
           <ControlSelect
             value={rule.mode}
             onChange={(event) => onChange({ ...rule, mode: event.target.value as "uniform" | "middle_weighted" | "fixed" })}
@@ -907,7 +872,7 @@ function RuleEditor({
   return (
     <div className="rule-editor">
       <label>
-        생성 방식
+        <span className="sr-only">생성 방식</span>
         <ControlSelect
           value={rule.mode}
           onChange={(event) => onChange({ ...rule, mode: event.target.value as "uniform" | "middle_weighted" })}
@@ -1052,39 +1017,56 @@ function ContentView({
 
   if (item.kind === "text_block") {
     return (
-      <div className="content-item" id={`item-${item.itemId}`}>
-        {item.title && <h3>{item.title}</h3>}
-        {item.description && <p>{item.description}</p>}
-        <InfoDetails>
-          <dt>FormItem.kind</dt><dd>{item.kind}</dd>
-          <dt>Google Forms API</dt><dd>Item.textItem</dd>
-          <dt>FormItem.itemId</dt><dd>{item.itemId}</dd>
-          <dt>FormItem.rawType</dt><dd>{item.rawType}</dd>
-        </InfoDetails>
-      </div>
+      <FormItemCard
+        id={`item-${item.itemId}`}
+        information={(
+          <>
+            <dt>FormItem.kind</dt><dd>{item.kind}</dd>
+            <dt>Google Forms API</dt><dd>Item.textItem</dd>
+            <dt>FormItem.itemId</dt><dd>{item.itemId}</dd>
+            <dt>FormItem.rawType</dt><dd>{item.rawType}</dd>
+          </>
+        )}
+      >
+        <FormItemCopy title={item.title} description={item.description} />
+      </FormItemCard>
     );
   }
 
   if (item.kind === "image") {
     return (
-      <div className="content-item" id={`item-${item.itemId}`}>
-        {item.description && <p>{item.description}</p>}
+      <FormItemCard
+        id={`item-${item.itemId}`}
+        information={(
+          <>
+            <dt>FormItem.kind</dt><dd>{item.kind}</dd>
+            <dt>Google Forms API</dt><dd>Item.imageItem</dd>
+            <dt>FormItem.itemId</dt><dd>{item.itemId}</dd>
+            <dt>FormItem.rawType</dt><dd>{item.rawType}</dd>
+            <dt>FormImageRef.sourceId</dt><dd>{item.image.sourceId}</dd>
+          </>
+        )}
+      >
+        <FormItemCopy description={item.description} />
         <ImageView image={item.image} />
-        <InfoDetails>
-          <dt>FormItem.kind</dt><dd>{item.kind}</dd>
-          <dt>Google Forms API</dt><dd>Item.imageItem</dd>
-          <dt>FormItem.itemId</dt><dd>{item.itemId}</dd>
-          <dt>FormItem.rawType</dt><dd>{item.rawType}</dd>
-          <dt>FormImageRef.sourceId</dt><dd>{item.image.sourceId}</dd>
-        </InfoDetails>
-      </div>
+      </FormItemCard>
     );
   }
 
   return (
-    <div className="content-item" id={`item-${item.itemId}`}>
-      {item.title && <h3>{item.title}</h3>}
-      {item.description && <p>{item.description}</p>}
+    <FormItemCard
+      id={`item-${item.itemId}`}
+      information={(
+        <>
+          <dt>FormItem.kind</dt><dd>{item.kind}</dd>
+          <dt>Google Forms API</dt><dd>Item.videoItem</dd>
+          <dt>FormItem.itemId</dt><dd>{item.itemId}</dd>
+          <dt>FormItem.rawType</dt><dd>{item.rawType}</dd>
+          <dt>FormVideoRef.videoId</dt><dd>{item.video.videoId}</dd>
+        </>
+      )}
+    >
+      <FormItemCopy title={item.title} description={item.description} />
       <iframe
         className="video-frame"
         src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(item.video.videoId)}`}
@@ -1093,14 +1075,7 @@ function ContentView({
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
         allowFullScreen
       />
-      <InfoDetails>
-        <dt>FormItem.kind</dt><dd>{item.kind}</dd>
-        <dt>Google Forms API</dt><dd>Item.videoItem</dd>
-        <dt>FormItem.itemId</dt><dd>{item.itemId}</dd>
-        <dt>FormItem.rawType</dt><dd>{item.rawType}</dd>
-        <dt>FormVideoRef.videoId</dt><dd>{item.video.videoId}</dd>
-      </InfoDetails>
-    </div>
+    </FormItemCard>
   );
 }
 
@@ -1597,7 +1572,7 @@ export function Workbench() {
             onEscape={() => closeHeaderPanel("generate")}
           >
             <form
-              className="joined-control header-command-form"
+              className="command-field header-command-form"
               aria-busy={generating}
               onSubmit={(event) => {
                 event.preventDefault();
@@ -1744,15 +1719,19 @@ export function Workbench() {
                   <h2 className="excluded-heading" id="excluded-items-heading">제외된 항목</h2>
                   <div className="item-list">
                     {skippedItems.map((item) => (
-                      <article className="content-item" key={item.itemId}>
-                        {item.title && <h3>{item.title}</h3>}
-                        <InfoDetails>
-                          <dt>Google Forms API</dt><dd>Item.questionItem → Question.fileUploadQuestion</dd>
-                          <dt>SkippedFormItem.itemId</dt><dd>{item.itemId}</dd>
-                          <dt>SkippedFormItem.rawType</dt><dd>{item.rawType}</dd>
-                          <dt>SkippedFormItem.reason</dt><dd>{item.reason}</dd>
-                        </InfoDetails>
-                      </article>
+                      <FormItemCard
+                        key={item.itemId}
+                        information={(
+                          <>
+                            <dt>Google Forms API</dt><dd>Item.questionItem → Question.fileUploadQuestion</dd>
+                            <dt>SkippedFormItem.itemId</dt><dd>{item.itemId}</dd>
+                            <dt>SkippedFormItem.rawType</dt><dd>{item.rawType}</dd>
+                            <dt>SkippedFormItem.reason</dt><dd>{item.reason}</dd>
+                          </>
+                        )}
+                      >
+                        <FormItemCopy title={item.title} />
+                      </FormItemCard>
                     ))}
                   </div>
                 </section>

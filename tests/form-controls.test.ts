@@ -16,7 +16,7 @@ describe("form control system", () => {
       createElement("option", { value: "one" }, "첫 문항"),
     ));
 
-    expect(input).toContain('class="control control--input control--command"');
+    expect(input).toContain('class="control field-line control--text control--input control--command"');
     expect(input).toContain('type="url"');
     expect(select).toContain('class="select-control select-control--editor"');
     expect(select).toContain('class="control control--select control--editor"');

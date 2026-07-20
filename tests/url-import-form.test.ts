@@ -16,10 +16,10 @@ describe("URL import form", () => {
     const hero = renderToStaticMarkup(createElement(UrlImportForm, { ...shared, variant: "hero" }));
     const command = renderToStaticMarkup(createElement(UrlImportForm, { ...shared, variant: "command" }));
 
-    expect(hero).toContain('class="import-form joined-control initial-import-form"');
-    expect(command).toContain('class="import-form joined-control header-command-form"');
-    expect(hero).toContain('class="control control--input control--command"');
-    expect(command).toContain('class="control control--input control--command"');
+    expect(hero).toContain('class="import-form command-field initial-import-form"');
+    expect(command).toContain('class="import-form command-field header-command-form"');
+    expect(hero).toContain('class="control field-line control--text control--input control--command"');
+    expect(command).toContain('class="control field-line control--text control--input control--command"');
     expect(hero).toContain("<span>검색</span>");
     expect(command).toContain(">search</span>");
     expect(command).not.toContain("<span>검색</span>");

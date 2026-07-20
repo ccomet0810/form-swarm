@@ -21,7 +21,7 @@ export function ControlInput({
   return (
     <input
       {...props}
-      className={classNames("control", "control--input", `control--${variant}`, className)}
+      className={classNames("control", "field-line", "control--text", "control--input", `control--${variant}`, className)}
     />
   );
 }
@@ -59,7 +59,7 @@ export function ControlTextarea({
   return (
     <textarea
       {...props}
-      className={classNames("control", "control--textarea", `control--${variant}`, className)}
+      className={classNames("control", "field-line", "control--text", "control--textarea", `control--${variant}`, className)}
     />
   );
 }
@@ -133,7 +133,7 @@ export function AutoGrowTextarea({
     <ControlTextarea
       ref={ref}
       id={id}
-      rows={3}
+      rows={1}
       value={value}
       aria-describedby={ariaDescribedBy}
       aria-invalid={invalid || undefined}
