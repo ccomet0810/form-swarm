@@ -1,10 +1,8 @@
 import type { FormEventHandler } from "react";
 import { ControlInput } from "./form-controls";
 import { HeaderCommandButton } from "./header-controls";
-import { MaterialSymbol } from "./material-symbol";
 
 export function UrlImportForm({
-  variant,
   value,
   analyzing,
   disabled,
@@ -12,7 +10,6 @@ export function UrlImportForm({
   onValueChange,
   onSubmit,
 }: {
-  variant: "hero" | "command";
   value: string;
   analyzing: boolean;
   disabled: boolean;
@@ -23,7 +20,7 @@ export function UrlImportForm({
   const label = analyzing ? "Google Forms 분석 중" : "Google Forms 검색";
   return (
     <form
-      className={`import-form command-field ${variant === "hero" ? "initial-import-form" : "header-command-form"}`}
+      className="import-form command-field header-command-form"
       onSubmit={onSubmit}
       aria-busy={analyzing}
     >
@@ -40,14 +37,7 @@ export function UrlImportForm({
         disabled={disabled}
         required
       />
-      {variant === "hero" ? (
-        <button type="submit" aria-label={label} disabled={disabled}>
-          <MaterialSymbol name="search" size={20} />
-          <span>{analyzing ? "분석 중" : "검색"}</span>
-        </button>
-      ) : (
-        <HeaderCommandButton label={label} symbol="search" disabled={disabled} />
-      )}
+      <HeaderCommandButton label={label} symbol="search" disabled={disabled} />
     </form>
   );
 }

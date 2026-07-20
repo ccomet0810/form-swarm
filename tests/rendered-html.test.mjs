@@ -13,6 +13,14 @@ async function render() {
   );
 }
 
+function openingTagContaining(markup, value) {
+  const valueIndex = markup.indexOf(value);
+  if (valueIndex < 0) return "";
+  const start = markup.lastIndexOf("<", valueIndex);
+  const end = markup.indexOf(">", valueIndex);
+  return markup.slice(start, end + 1);
+}
+
 test("server-renders the minimal form analyzer", async () => {
   const response = await render();
   assert.equal(response.status, 200);
@@ -21,8 +29,12 @@ test("server-renders the minimal form analyzer", async () => {
   const html = await response.text();
   const body = html.match(/<body>([\s\S]*?)<\/body>/)?.[1] ?? html;
   assert.match(html, /Google Forms 링크/);
-  assert.match(html, /분석/);
+  assert.match(body, /<h1>FORM SWARM<\/h1>/);
+  assert.match(body, /id="header-url-panel"/);
+  assert.match(openingTagContaining(body, 'aria-label="응답 생성 설정"'), /disabled/);
+  assert.match(openingTagContaining(body, 'id="workspace-tab-questions"'), /disabled/);
   assert.match(html, /og-form-swarm\.png/);
+  assert.doesNotMatch(body, /brand-wordmark|initial-import-form/);
   assert.doesNotMatch(body, /FormSwarm|링크 하나로|READ-ONLY LAB/);
   assert.doesNotMatch(body, /온보딩 경험 평가|손글씨 폰트 설문|랜덤 시드/);
   assert.doesNotMatch(body, /codex-preview|Your site is taking shape|react-loading-skeleton/i);

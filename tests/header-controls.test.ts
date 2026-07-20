@@ -19,6 +19,24 @@ describe("header controls", () => {
     expect(markup).not.toContain('>실제 제출</');
   });
 
+  it("keeps disclosure identity separate from busy state", () => {
+    const markup = renderToStaticMarkup(createElement(HeaderToolButton, {
+      label: "응답 생성 설정",
+      title: "응답 생성 설정",
+      symbol: "auto_awesome",
+      controls: "header-generation-panel",
+      expanded: true,
+      busy: true,
+      disabled: true,
+      onClick: () => undefined,
+    }));
+
+    expect(markup).toContain('aria-controls="header-generation-panel"');
+    expect(markup).toContain('aria-expanded="true"');
+    expect(markup).toContain('aria-busy="true"');
+    expect(markup).toContain("disabled");
+  });
+
   it("keeps command actions icon-only and exposes their disabled state", () => {
     const markup = renderToStaticMarkup(createElement(HeaderCommandButton, {
       label: "응답 생성",

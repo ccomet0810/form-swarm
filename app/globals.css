@@ -37,6 +37,7 @@
   --header-command-action-width: var(--control-icon-slot);
   --header-icon-idle: #666662;
   --header-icon-active: var(--text);
+  --header-surface: var(--surface);
   --disclosure-height: 40px;
   --card-padding: var(--space-5);
   --item-gap: var(--space-4);
@@ -215,19 +216,9 @@ html {
 
 .icon-button:focus-visible {
   outline: 0;
-  background: transparent;
+  background: var(--focus-fill);
   color: var(--header-icon-active);
   text-decoration: none;
-}
-
-.icon-button:focus-visible::after {
-  position: absolute;
-  right: 9px;
-  bottom: 5px;
-  left: 9px;
-  height: 2px;
-  background: currentColor;
-  content: "";
 }
 
 .icon-button--outlined {
@@ -312,15 +303,11 @@ summary:focus-visible {
 }
 
 .workbench {
-  width: min(1240px, calc(100% - 32px));
+  width: 100%;
   max-width: 100%;
   min-width: 0;
   margin: 0 auto;
   padding: 0 0 88px;
-}
-
-.workbench.is-workspace {
-  width: 100%;
 }
 
 .workbench.has-header-panel {
@@ -328,93 +315,32 @@ summary:focus-visible {
   --anchor-offset: calc(var(--compact-search-height) + var(--space-4));
 }
 
-.is-workspace .analysis {
+.analysis {
   width: min(1240px, calc(100% - 32px));
   margin-inline: auto;
-}
-
-.brand-stage {
-  display: flex;
-  height: clamp(280px, 50svh, 520px);
-  align-items: flex-end;
-  overflow: clip;
-  opacity: 1;
-}
-
-.brand-clip {
-  width: 100%;
-  overflow: clip;
-  padding: 22px 0 18px;
-}
-
-.brand-wordmark {
-  display: flex;
-  gap: 0.13em;
-  align-items: baseline;
-  margin: 0;
-  color: var(--text);
-  font-size: clamp(70px, 13.1vw, 164px);
-  font-weight: 950;
-  letter-spacing: -0.085em;
-  line-height: 0.76;
-  white-space: nowrap;
-}
-
-.is-workspace .brand-stage {
-  height: 0;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.is-workspace .brand-wordmark {
-  opacity: 0;
 }
 
 .search-region {
   position: sticky;
   z-index: 20;
   top: 0;
-  width: min(100%, var(--content-column));
+  width: 100%;
   max-width: 100%;
   min-width: 0;
-  margin-inline: auto;
-  padding: 12px 0;
-  background: var(--canvas);
-}
-
-.is-idle .search-region {
-  padding: 0 0 34px;
-}
-
-.is-workspace .search-region {
-  width: 100%;
-  max-width: none;
   margin: 0;
   padding: 0;
   border-bottom: var(--border-strong) solid var(--text);
-  background: var(--surface);
+  background: var(--header-surface);
 }
 
 .header-primary {
-  min-width: 0;
-}
-
-.is-workspace .header-primary.has-form {
   display: grid;
   min-height: var(--header-primary-height);
+  min-width: 0;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 16px;
   padding: 9px 16px;
-}
-
-.is-workspace .header-primary:not(.has-form) {
-  padding: 9px 20px;
-}
-
-.is-workspace .header-primary:not(.has-form) .import-form {
-  width: min(100%, var(--content-column));
-  margin-inline: auto;
 }
 
 .header-identity {
@@ -425,11 +351,14 @@ summary:focus-visible {
   gap: 2px;
 }
 
-.header-identity strong {
+.header-identity :is(h1, strong) {
+  margin: 0;
+  overflow: hidden;
   font-size: 15px;
   font-weight: 950;
   letter-spacing: -0.045em;
   line-height: 1.1;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -450,34 +379,10 @@ summary:focus-visible {
 
 .import-form {
   max-width: 100%;
-  grid-template-columns: minmax(0, 1fr) 104px;
 }
 
 .command-field > button {
   height: var(--header-command-control-height);
-}
-
-.is-idle .import-form .control--command {
-  height: 60px;
-}
-
-.initial-import-form > button {
-  min-height: var(--control-height);
-  padding: 0 16px;
-  border: var(--border-strong) solid var(--text);
-  border-radius: 0;
-  background: var(--text);
-  color: #fff;
-  font-weight: 800;
-}
-
-.is-idle .initial-import-form > button {
-  height: 60px;
-  min-height: 60px;
-}
-
-.is-workspace .initial-import-form > button {
-  height: var(--control-height);
 }
 
 .import-form button,
@@ -495,7 +400,7 @@ summary:focus-visible {
   align-items: end;
   justify-content: center;
   border-top: 1px solid var(--line-soft);
-  background: var(--surface);
+  background: var(--header-surface);
 }
 
 .workspace-tabs {
@@ -515,7 +420,7 @@ summary:focus-visible {
   overflow: hidden;
   border: 0;
   border-radius: 0;
-  background: var(--surface);
+  background: transparent;
   color: var(--text);
   font-size: 13px;
   font-weight: 700;
@@ -525,7 +430,7 @@ summary:focus-visible {
 
 .workspace-tabs button[aria-selected="true"] {
   box-shadow: inset 0 -3px var(--text);
-  background: var(--surface);
+  background: transparent;
   color: var(--text);
   font-weight: 900;
 }
@@ -567,9 +472,19 @@ summary:focus-visible {
   color: var(--header-icon-active);
 }
 
+.header-icon-button[aria-expanded="true"]:not([aria-busy="true"])::after {
+  position: absolute;
+  right: 8px;
+  bottom: 0;
+  left: 8px;
+  height: 2px;
+  background: currentColor;
+  content: "";
+}
+
 .header-icon-button:focus-visible {
   outline: 0;
-  background: transparent;
+  background: var(--focus-fill);
   color: var(--header-icon-active);
   text-decoration: none;
 }
@@ -581,13 +496,13 @@ summary:focus-visible {
   justify-content: center;
   padding: 8px 16px;
   border-top: 1px solid var(--line-soft);
-  background: var(--soft);
+  background: var(--header-surface);
 }
 
 .header-command-form {
   width: 100%;
   max-width: none;
-  background: var(--surface);
+  background: transparent;
   box-shadow: inset 0 -1px var(--line-soft);
 }
 
@@ -638,15 +553,6 @@ summary:focus-visible {
   background: transparent;
   color: var(--header-icon-active);
   text-decoration: none;
-}
-
-.initial-import-form > button:hover:not(:disabled) {
-  background: var(--text);
-  color: var(--surface);
-}
-
-.initial-import-form > button:hover:not(:disabled) .material-symbol {
-  color: var(--line-soft);
 }
 
 .status-region {
@@ -2254,16 +2160,12 @@ table {
 
 @media (max-width: 820px) {
   .workbench {
-    width: min(100% - 24px, 760px);
+    width: 100%;
     padding-bottom: 56px;
   }
 
-  .is-workspace .analysis {
+  .analysis {
     width: min(100% - 24px, 760px);
-  }
-
-  .is-idle .search-region {
-    padding: 0 0 28px;
   }
 
   .workspace-tabs button {
@@ -2292,27 +2194,7 @@ table {
     --card-padding: var(--space-4);
   }
 
-  .brand-stage {
-    height: clamp(270px, 47svh, 430px);
-  }
-
-  .brand-clip {
-    padding-bottom: 16px;
-  }
-
-  .brand-wordmark {
-    display: grid;
-    gap: 0.08em;
-    font-size: clamp(66px, 26vw, 108px);
-    line-height: 0.72;
-    white-space: normal;
-  }
-
-  .import-form {
-    grid-template-columns: minmax(0, 1fr) 86px;
-  }
-
-  .is-workspace .header-primary.has-form {
+  .header-primary {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 6px;
     padding-inline: 10px;
@@ -2334,10 +2216,6 @@ table {
     flex: 1 1 0;
     padding-inline: 4px;
     font-size: 11.5px;
-  }
-
-  .is-workspace .import-form button {
-    padding-inline: 0;
   }
 
   .workspace-actions {

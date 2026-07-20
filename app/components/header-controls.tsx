@@ -10,6 +10,7 @@ export function HeaderToolButton({
   filled = false,
   controls,
   expanded,
+  busy = false,
   disabled = false,
   onClick,
 }: {
@@ -20,6 +21,7 @@ export function HeaderToolButton({
   filled?: boolean;
   controls?: string;
   expanded?: boolean;
+  busy?: boolean;
   disabled?: boolean;
   onClick: () => void;
 }) {
@@ -34,6 +36,7 @@ export function HeaderToolButton({
       filled={filled}
       aria-controls={controls}
       aria-expanded={expanded}
+      aria-busy={busy || undefined}
       title={title}
       disabled={disabled}
       onClick={onClick}

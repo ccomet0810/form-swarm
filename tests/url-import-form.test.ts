@@ -12,16 +12,14 @@ describe("URL import form", () => {
     onSubmit: () => undefined,
   };
 
-  it("shares the same command input between hero and header variants", () => {
-    const hero = renderToStaticMarkup(createElement(UrlImportForm, { ...shared, variant: "hero" }));
-    const command = renderToStaticMarkup(createElement(UrlImportForm, { ...shared, variant: "command" }));
+  it("uses one icon-only header command form", () => {
+    const markup = renderToStaticMarkup(createElement(UrlImportForm, shared));
 
-    expect(hero).toContain('class="import-form command-field initial-import-form"');
-    expect(command).toContain('class="import-form command-field header-command-form"');
-    expect(hero).toContain('class="control field-line control--text control--input control--command"');
-    expect(command).toContain('class="control field-line control--text control--input control--command"');
-    expect(hero).toContain("<span>검색</span>");
-    expect(command).toContain(">search</span>");
-    expect(command).not.toContain("<span>검색</span>");
+    expect(markup).toContain('class="import-form command-field header-command-form"');
+    expect(markup).toContain('class="control field-line control--text control--input control--command"');
+    expect(markup).toContain('aria-label="Google Forms 검색"');
+    expect(markup).toContain(">search</span>");
+    expect(markup).not.toContain("<span>검색</span>");
+    expect(markup).not.toContain("initial-import-form");
   });
 });

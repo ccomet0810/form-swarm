@@ -78,6 +78,10 @@ type WorkspaceTab = "questions" | PreviewTab;
 type DisplayFormItem = FormQuestion | Exclude<FormItem, { kind: "section" }>;
 type HeaderPanel = "url" | "generate" | null;
 
+export function resolveHeaderPanel(hasForm: boolean, panel: HeaderPanel): HeaderPanel {
+  return hasForm ? panel : "url";
+}
+
 function nonEmptyLines(values: string[]): string[] {
   return values.map((value) => value.trim()).filter(Boolean);
 }
@@ -1091,7 +1095,6 @@ export function Workbench() {
   const [responses, setResponses] = useState<GeneratedResponse[]>([]);
   const [count, setCount] = useState<number | "">("");
   const [analyzing, setAnalyzing] = useState(false);
-  const [hasLaunched, setHasLaunched] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -1110,6 +1113,7 @@ export function Workbench() {
   const generateTriggerRef = useRef<HTMLButtonElement>(null);
   const busy = analyzing || generating || submitting;
   const formIsStale = Boolean(form && analyzedUrl !== url.trim());
+  const activeHeaderPanel = resolveHeaderPanel(Boolean(form), headerPanel);
 
   const ruleMap = useMemo(() => new Map(rules.map((rule) => [rule.questionId, rule])), [rules]);
   const itemsBySection = useMemo(() => {
@@ -1134,13 +1138,18 @@ export function Workbench() {
   const selectedResponse = responses[Math.max(0, Math.min(responses.length - 1, selectedResponseIndex))] ?? null;
 
   function toggleHeaderPanel(panel: Exclude<HeaderPanel, null>) {
+    if (!form) {
+      document.getElementById("form-url")?.focus({ preventScroll: true });
+      return;
+    }
     setHeaderPanel((current) => current === panel ? null : panel);
   }
 
   function closeHeaderPanel(panel: Exclude<HeaderPanel, null>) {
+    if (!form) return;
     setHeaderPanel(null);
     requestAnimationFrame(() => {
-      (panel === "url" ? linkTriggerRef : generateTriggerRef).current?.focus();
+      (panel === "url" ? linkTriggerRef : generateTriggerRef).current?.focus({ preventScroll: true });
     });
   }
 
@@ -1152,11 +1161,13 @@ export function Workbench() {
   }
 
   function selectWorkspaceTab(tab: WorkspaceTab) {
+    if (!form) return;
     if (tab !== "questions" && responses.length === 0) return;
     setWorkspaceTab(tab);
   }
 
   function handleWorkspaceTabKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (!form) return;
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     const tabs: WorkspaceTab[] = responses.length > 0
       ? ["questions", "summary", "question", "individual"]
@@ -1219,14 +1230,13 @@ export function Workbench() {
   async function analyzeForm(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!url.trim() || busy) return;
-    setHasLaunched(true);
     setAnalyzing(true);
     setError(null);
     setMessage(null);
 
     const promptSuggestionRequestId = promptSuggestionRequestRef.current + 1;
     promptSuggestionRequestRef.current = promptSuggestionRequestId;
-    const shouldRestoreLinkFocus = Boolean(form && headerPanel === "url");
+    const shouldRestoreLinkFocus = activeHeaderPanel === "url";
     let analyzedSuccessfully = false;
 
     try {
@@ -1267,7 +1277,7 @@ export function Workbench() {
     } finally {
       setAnalyzing(false);
       if (analyzedSuccessfully && shouldRestoreLinkFocus) {
-        requestAnimationFrame(() => linkTriggerRef.current?.focus());
+        requestAnimationFrame(() => linkTriggerRef.current?.focus({ preventScroll: true }));
       }
     }
   }
@@ -1439,7 +1449,7 @@ export function Workbench() {
     } finally {
       setGenerating(false);
       if (generatedSuccessfully) {
-        requestAnimationFrame(() => generateTriggerRef.current?.focus());
+        requestAnimationFrame(() => generateTriggerRef.current?.focus({ preventScroll: true }));
       }
     }
   }
@@ -1485,88 +1495,66 @@ export function Workbench() {
   const skippedItems = form?.diagnostics.skippedItems ?? [];
 
   return (
-    <main className={`workbench ${hasLaunched ? "is-workspace" : "is-idle"}${analyzing ? " is-analyzing" : ""}${headerPanel ? " has-header-panel" : ""}`}>
-      <div className="brand-stage" aria-hidden={hasLaunched}>
-        <div className="brand-clip">
-          <h1 className="brand-wordmark" aria-label="Form Swarm">
-            <span>FORM</span>
-            <span>SWARM</span>
-          </h1>
-        </div>
-      </div>
-
+    <main className={`workbench${analyzing ? " is-analyzing" : ""}${activeHeaderPanel ? " has-header-panel" : ""}`}>
       <header className="search-region">
-        <div className={`header-primary${form ? " has-form" : ""}`}>
-          {form && (
-            <div className="header-identity">
-              <strong>FORM SWARM</strong>
-              <span title={form.title || "제목 없는 설문지"}>{form.title || "제목 없는 설문지"}</span>
-            </div>
-          )}
+        <div className="header-primary">
+          <div className="header-identity">
+            {form ? <strong>FORM SWARM</strong> : <h1>FORM SWARM</h1>}
+            {form && <span title={form.title || "제목 없는 설문지"}>{form.title || "제목 없는 설문지"}</span>}
+          </div>
 
-          {!form && (
-            <UrlImportForm
-              variant="hero"
-              value={url}
-              analyzing={analyzing}
+          <div className="workspace-actions">
+            <HeaderToolButton
+              buttonRef={linkTriggerRef}
+              label="Google Forms 링크 입력"
+              title="링크 입력"
+              symbol="link"
+              controls="header-url-panel"
+              expanded={activeHeaderPanel === "url"}
+              busy={analyzing}
               disabled={busy}
-              onValueChange={updateUrlValue}
-              onSubmit={analyzeForm}
+              onClick={() => toggleHeaderPanel("url")}
             />
-          )}
-
-          {form && (
-            <div className="workspace-actions">
-              <HeaderToolButton
-                buttonRef={linkTriggerRef}
-                label="Google Forms 링크 입력"
-                title="링크 입력"
-                symbol="link"
-                controls={headerPanel === "url" ? "header-url-panel" : undefined}
-                expanded={headerPanel === "url"}
-                disabled={busy}
-                onClick={() => toggleHeaderPanel("url")}
-              />
-              <HeaderToolButton
-                buttonRef={generateTriggerRef}
-                label={generating ? "응답 생성 중" : "응답 생성 설정"}
-                title="응답 생성 설정"
-                symbol="auto_awesome"
-                controls={headerPanel === "generate" ? "header-generation-panel" : undefined}
-                expanded={headerPanel === "generate"}
-                disabled={busy || formIsStale}
-                onClick={() => toggleHeaderPanel("generate")}
-              />
-              <HeaderToolButton
-                label={responses.length > 0 ? `${responses.length}개 응답 실제 제출` : "실제 제출"}
-                title="실제 제출"
-                symbol="send"
-                filled
-                disabled={busy || formIsStale || responses.length === 0 || !allResponsesValid}
-                onClick={() => void submitSequentially()}
-              />
-            </div>
-          )}
+            <HeaderToolButton
+              buttonRef={generateTriggerRef}
+              label={generating ? "응답 생성 중" : "응답 생성 설정"}
+              title="응답 생성 설정"
+              symbol="auto_awesome"
+              controls="header-generation-panel"
+              expanded={activeHeaderPanel === "generate"}
+              busy={generating}
+              disabled={!form || busy || formIsStale}
+              onClick={() => toggleHeaderPanel("generate")}
+            />
+            <HeaderToolButton
+              label={responses.length > 0 ? `${responses.length}개 응답 실제 제출` : "실제 제출"}
+              title="실제 제출"
+              symbol="send"
+              filled
+              busy={submitting}
+              disabled={!form || busy || formIsStale || responses.length === 0 || !allResponsesValid}
+              onClick={() => void submitSequentially()}
+            />
+          </div>
         </div>
 
-        {form && headerPanel === "url" && (
+        {activeHeaderPanel === "url" && (
           <HeaderCommandPanel
             id="header-url-panel"
             onEscape={() => closeHeaderPanel("url")}
           >
             <UrlImportForm
-              variant="command"
               value={url}
               analyzing={analyzing}
               disabled={busy}
-              autoFocus
+              autoFocus={Boolean(form)}
               onValueChange={updateUrlValue}
               onSubmit={analyzeForm}
             />
           </HeaderCommandPanel>
         )}
 
-        {form && headerPanel === "generate" && (
+        {form && activeHeaderPanel === "generate" && (
           <HeaderCommandPanel
             id="header-generation-panel"
             onEscape={() => closeHeaderPanel("generate")}
@@ -1608,41 +1596,42 @@ export function Workbench() {
           </HeaderCommandPanel>
         )}
 
-        {form && (
-          <div className="workspace-nav-row">
-            <div
-              className="workspace-tabs"
-              role="tablist"
-              aria-label="작업 화면"
-              onKeyDown={handleWorkspaceTabKeyDown}
-            >
-              {([
-                ["questions", "문항"],
-                ["summary", "요약"],
-                ["question", "문항별"],
-                ["individual", "개별 응답"],
-              ] as const).map(([tab, label]) => {
-                const responseTab = tab !== "questions";
-                const disabled = responseTab && responses.length === 0;
-                return (
-                  <button
-                    id={`workspace-tab-${tab}`}
-                    key={tab}
-                    type="button"
-                    role="tab"
-                    aria-selected={workspaceTab === tab}
-                    aria-controls={`workspace-panel-${tab}`}
-                    tabIndex={workspaceTab === tab ? 0 : -1}
-                    disabled={disabled}
-                    onClick={() => selectWorkspaceTab(tab)}
-                  >
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
+        <div className="workspace-nav-row">
+          <div
+            className="workspace-tabs"
+            role="tablist"
+            aria-label="작업 화면"
+            aria-hidden={!form || undefined}
+            inert={!form || undefined}
+            onKeyDown={handleWorkspaceTabKeyDown}
+          >
+            {([
+              ["questions", "문항"],
+              ["summary", "요약"],
+              ["question", "문항별"],
+              ["individual", "개별 응답"],
+            ] as const).map(([tab, label]) => {
+              const responseTab = tab !== "questions";
+              const disabled = !form || (responseTab && responses.length === 0);
+              const selected = Boolean(form && workspaceTab === tab);
+              return (
+                <button
+                  id={`workspace-tab-${tab}`}
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  aria-controls={`workspace-panel-${tab}`}
+                  tabIndex={selected ? 0 : -1}
+                  disabled={disabled}
+                  onClick={() => selectWorkspaceTab(tab)}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
-        )}
+        </div>
 
         {(generating || submitting || message) && (
           <p className="sr-only" role="status" aria-live="polite">
