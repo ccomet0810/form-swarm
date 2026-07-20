@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Circle, Heart, Star, ThumbsUp } from "lucide-react";
+import { Circle, Heart, Search, Send, Sparkles, Star, ThumbsUp } from "lucide-react";
 import type {
   FormImageRef,
   FormItem,
@@ -1584,29 +1584,96 @@ export function Workbench() {
         </div>
       </div>
 
-      <div className="search-region">
-        <form className="import-form" onSubmit={analyzeForm} aria-busy={analyzing}>
-          <label className="sr-only" htmlFor="form-url">Google Forms 링크</label>
-          <input
-            id="form-url"
-            type="url"
-            value={url}
-            onChange={(event) => {
-              setUrl(event.target.value);
-              setError(null);
-              setMessage(null);
-              setRuleIssue(null);
-            }}
-            placeholder="Google Forms 링크"
-            maxLength={2_048}
-            disabled={busy}
-            required
-          />
-          <button type="submit" disabled={busy}>{analyzing ? "분석 중" : "검색"}</button>
-        </form>
+      <header className="search-region">
+        <div className={`header-primary${form ? " has-form" : ""}`}>
+          {form && (
+            <div className="header-identity">
+              <strong>FORM SWARM</strong>
+              <span title={form.title || "제목 없는 설문지"}>{form.title || "제목 없는 설문지"}</span>
+            </div>
+          )}
+
+          <form className="import-form" onSubmit={analyzeForm} aria-busy={analyzing}>
+            <label className="sr-only" htmlFor="form-url">Google Forms 링크</label>
+            <input
+              id="form-url"
+              type="url"
+              value={url}
+              onChange={(event) => {
+                setUrl(event.target.value);
+                setError(null);
+                setMessage(null);
+                setRuleIssue(null);
+              }}
+              placeholder="Google Forms 링크"
+              maxLength={2_048}
+              disabled={busy}
+              required
+            />
+            <button
+              type="submit"
+              aria-label={analyzing ? "Google Forms 분석 중" : "Google Forms 검색"}
+              disabled={busy}
+            >
+              <Search aria-hidden="true" size={17} strokeWidth={2.2} />
+              <span>{analyzing ? "분석 중" : "검색"}</span>
+            </button>
+          </form>
+
+          {form && (
+            <div className="workspace-actions">
+              <label className="toolbar-count" htmlFor="response-count">
+                <span>생성 개수</span>
+                <input
+                  id="response-count"
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={count}
+                  disabled={busy || formIsStale}
+                  onChange={(event) => setCount(Number(event.target.value))}
+                />
+              </label>
+              <button
+                className="toolbar-generate"
+                type="button"
+                disabled={busy || formIsStale}
+                onClick={() => void generate()}
+              >
+                <Sparkles aria-hidden="true" size={17} strokeWidth={2.2} />
+                <span className="action-label--wide">{generating ? "생성 중" : "응답 생성"}</span>
+                <span className="action-label--compact">{generating ? "생성 중" : "생성"}</span>
+              </button>
+              <button
+                className="toolbar-submit-button"
+                type="button"
+                aria-label={responses.length > 0 ? `${responses.length}개 응답 실제 제출` : "실제 제출"}
+                disabled={busy || formIsStale || responses.length === 0 || !allResponsesValid}
+                onClick={() => void submitSequentially()}
+              >
+                <Send aria-hidden="true" size={17} strokeWidth={2.2} />
+                <span className="action-label--wide">
+                  {submitting
+                    ? `제출 ${submission?.done ?? 0}/${responses.length}`
+                    : responses.length > 0
+                      ? `${responses.length}개 실제 제출`
+                      : "실제 제출"}
+                </span>
+                <span className="action-label--compact">
+                  {submitting
+                    ? `${submission?.done ?? 0}/${responses.length}`
+                    : responses.length > 0
+                      ? `${responses.length}개 제출`
+                      : "제출"}
+                </span>
+                <span className="action-label--narrow">제출</span>
+              </button>
+            </div>
+          )}
+        </div>
 
         {form && (
-          <div className="workspace-toolbar">
+          <div className="workspace-nav-row">
             <div
               className="workspace-tabs"
               role="tablist"
@@ -1638,54 +1705,17 @@ export function Workbench() {
                 );
               })}
             </div>
-
-            <div className="workspace-actions">
-              <label className="toolbar-count" htmlFor="response-count">
-                <span>생성 개수</span>
-                <input
-                  id="response-count"
-                  type="number"
-                  min={1}
-                  max={500}
-                  value={count}
-                  disabled={busy || formIsStale}
-                  onChange={(event) => setCount(Number(event.target.value))}
-                />
-              </label>
-              <button
-                className="toolbar-generate"
-                type="button"
-                disabled={busy || formIsStale}
-                onClick={() => void generate()}
-              >
-                {generating ? "생성 중" : "응답 생성"}
-              </button>
-              <div className="toolbar-submit">
-                <span>실제 제출</span>
-                <button
-                  type="button"
-                  disabled={busy || formIsStale || responses.length === 0 || !allResponsesValid}
-                  onClick={() => void submitSequentially()}
-                >
-                  {submitting
-                    ? `${submission?.done ?? 0}/${responses.length}`
-                    : responses.length > 0
-                      ? `${responses.length}개 순차 제출`
-                      : "순차 제출"}
-                </button>
-              </div>
-            </div>
-
-            {(generating || submitting || message) && (
-              <p className="sr-only" role="status" aria-live="polite">
-                {submitting
-                  ? `응답 제출 중 ${submission?.done ?? 0}/${responses.length}`
-                  : message}
-              </p>
-            )}
           </div>
         )}
-      </div>
+
+        {(generating || submitting || message) && (
+          <p className="sr-only" role="status" aria-live="polite">
+            {submitting
+              ? `응답 제출 중 ${submission?.done ?? 0}/${responses.length}`
+              : message}
+          </p>
+        )}
+      </header>
 
       {(error || formIsStale || (!form && message)) && (
         <div className="status-region">
