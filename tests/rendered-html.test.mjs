@@ -31,10 +31,11 @@ test("server-renders the minimal form analyzer", async () => {
   assert.match(html, /Google Forms 링크/);
   assert.match(body, /<h1>FORM SWARM<\/h1>/);
   assert.match(body, /id="header-url-panel"/);
+  assert.match(body, /header-primary has-command is-required-command/);
   assert.match(openingTagContaining(body, 'aria-label="응답 생성 설정"'), /disabled/);
   assert.match(openingTagContaining(body, 'id="workspace-tab-questions"'), /disabled/);
   assert.match(html, /og-form-swarm\.png/);
-  assert.doesNotMatch(body, /brand-wordmark|initial-import-form/);
+  assert.doesNotMatch(body, /brand-wordmark|initial-import-form|header-command-row|header-command-back/);
   assert.doesNotMatch(body, /FormSwarm|링크 하나로|READ-ONLY LAB/);
   assert.doesNotMatch(body, /온보딩 경험 평가|손글씨 폰트 설문|랜덤 시드/);
   assert.doesNotMatch(body, /codex-preview|Your site is taking shape|react-loading-skeleton/i);

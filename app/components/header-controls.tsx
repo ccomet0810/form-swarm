@@ -44,27 +44,39 @@ export function HeaderToolButton({
   );
 }
 
-export function HeaderCommandPanel({
+export function HeaderCommandSlot({
   id,
-  onEscape,
   children,
 }: {
   id: string;
-  onEscape: () => void;
   children: ReactNode;
 }) {
   return (
-    <div
-      className="header-command-row"
-      id={id}
-      onKeyDown={(event) => {
-        if (event.key !== "Escape") return;
-        event.preventDefault();
-        onEscape();
-      }}
-    >
+    <div className="header-command-slot" id={id}>
       {children}
     </div>
+  );
+}
+
+export function HeaderCommandBackButton({
+  label,
+  disabled = false,
+  onClick,
+}: {
+  label: string;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <IconButton
+      className="header-command-back"
+      variant="plain"
+      label={label}
+      symbol="chevron_left"
+      symbolSize={22}
+      disabled={disabled}
+      onClick={onClick}
+    />
   );
 }
 

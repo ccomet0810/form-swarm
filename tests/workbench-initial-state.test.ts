@@ -22,7 +22,8 @@ describe("workbench initial state", () => {
   it("renders the real header with only URL entry available", () => {
     const markup = renderToStaticMarkup(createElement(Workbench));
 
-    expect(markup).toContain('<main class="workbench has-header-panel">');
+    expect(markup).toContain('<main class="workbench">');
+    expect(markup).toContain('class="header-primary has-command is-required-command"');
     expect(markup).toContain("<h1>FORM SWARM</h1>");
     expect(markup).toContain('id="header-url-panel"');
     expect(openingTagContaining(markup, 'id="form-url"')).not.toContain("disabled");
@@ -33,6 +34,10 @@ describe("workbench initial state", () => {
     expect(openingTagContaining(markup, 'id="workspace-tab-questions"')).toContain("disabled");
     expect(openingTagContaining(markup, 'class="workspace-tabs"')).toContain('aria-hidden="true"');
     expect(openingTagContaining(markup, 'class="workspace-tabs"')).toContain("inert");
+    expect(markup.indexOf('class="header-primary has-command is-required-command"')).toBeLessThan(markup.indexOf('id="header-url-panel"'));
+    expect(markup.indexOf('id="header-url-panel"')).toBeLessThan(markup.indexOf('class="workspace-actions"'));
+    expect(markup).not.toContain("header-command-row");
+    expect(markup).not.toContain("header-command-back");
     expect(markup).not.toContain("brand-wordmark");
     expect(markup).not.toContain("initial-import-form");
   });

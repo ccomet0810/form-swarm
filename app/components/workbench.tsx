@@ -24,7 +24,7 @@ import {
   MAX_RESPONSE_COUNT,
   MIN_RESPONSE_COUNT,
 } from "../../lib/ui/response-count";
-import { HeaderCommandButton, HeaderCommandPanel, HeaderToolButton } from "./header-controls";
+import { HeaderCommandBackButton, HeaderCommandButton, HeaderCommandSlot, HeaderToolButton } from "./header-controls";
 import { FormItemCard, FormItemCopy } from "./form-item-card";
 import { AutoGrowTextarea, ControlInput, ControlSelect } from "./form-controls";
 import { InfoDetails } from "./info-details";
@@ -1146,7 +1146,7 @@ export function Workbench() {
   }
 
   function closeHeaderPanel(panel: Exclude<HeaderPanel, null>) {
-    if (!form) return;
+    if (!form || busy) return;
     setHeaderPanel(null);
     requestAnimationFrame(() => {
       (panel === "url" ? linkTriggerRef : generateTriggerRef).current?.focus({ preventScroll: true });
@@ -1276,9 +1276,13 @@ export function Workbench() {
       setError(caught instanceof Error ? caught.message : "폼을 분석하지 못했습니다.");
     } finally {
       setAnalyzing(false);
-      if (analyzedSuccessfully && shouldRestoreLinkFocus) {
-        requestAnimationFrame(() => linkTriggerRef.current?.focus({ preventScroll: true }));
-      }
+      requestAnimationFrame(() => {
+        if (analyzedSuccessfully && shouldRestoreLinkFocus) {
+          linkTriggerRef.current?.focus({ preventScroll: true });
+        } else if (!analyzedSuccessfully) {
+          document.getElementById("form-url")?.focus({ preventScroll: true });
+        }
+      });
     }
   }
 
@@ -1448,9 +1452,13 @@ export function Workbench() {
       setMessage(null);
     } finally {
       setGenerating(false);
-      if (generatedSuccessfully) {
-        requestAnimationFrame(() => generateTriggerRef.current?.focus({ preventScroll: true }));
-      }
+      requestAnimationFrame(() => {
+        if (generatedSuccessfully) {
+          generateTriggerRef.current?.focus({ preventScroll: true });
+        } else {
+          document.getElementById("response-count")?.focus({ preventScroll: true });
+        }
+      });
     }
   }
 
@@ -1495,13 +1503,84 @@ export function Workbench() {
   const skippedItems = form?.diagnostics.skippedItems ?? [];
 
   return (
-    <main className={`workbench${analyzing ? " is-analyzing" : ""}${activeHeaderPanel ? " has-header-panel" : ""}`}>
+    <main className={`workbench${analyzing ? " is-analyzing" : ""}`}>
       <header className="search-region">
-        <div className="header-primary">
+        <div
+          className={`header-primary${activeHeaderPanel ? " has-command" : ""}${!form ? " is-required-command" : ""}`}
+          onKeyDown={(event) => {
+            if (!activeHeaderPanel || event.key !== "Escape") return;
+            event.preventDefault();
+            closeHeaderPanel(activeHeaderPanel);
+          }}
+        >
           <div className="header-identity">
             {form ? <strong>FORM SWARM</strong> : <h1>FORM SWARM</h1>}
             {form && <span title={form.title || "제목 없는 설문지"}>{form.title || "제목 없는 설문지"}</span>}
           </div>
+
+          {form && activeHeaderPanel && (
+            <HeaderCommandBackButton
+              label={activeHeaderPanel === "url" ? "링크 입력 닫기" : "응답 생성 설정 닫기"}
+              disabled={busy}
+              onClick={() => closeHeaderPanel(activeHeaderPanel)}
+            />
+          )}
+
+          {activeHeaderPanel === "url" && (
+            <HeaderCommandSlot
+              id="header-url-panel"
+            >
+              <UrlImportForm
+                value={url}
+                analyzing={analyzing}
+                disabled={busy}
+                autoFocus={Boolean(form)}
+                onValueChange={updateUrlValue}
+                onSubmit={analyzeForm}
+              />
+            </HeaderCommandSlot>
+          )}
+
+          {form && activeHeaderPanel === "generate" && (
+            <HeaderCommandSlot
+              id="header-generation-panel"
+            >
+              <form
+                className="command-field header-command-form"
+                aria-busy={generating}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void generate();
+                }}
+              >
+                <label className="sr-only" htmlFor="response-count">생성 개수</label>
+                <ControlInput
+                  variant="command"
+                  className="header-count-input"
+                  id="response-count"
+                  type="number"
+                  min={MIN_RESPONSE_COUNT}
+                  max={MAX_RESPONSE_COUNT}
+                  step={1}
+                  inputMode="numeric"
+                  required
+                  value={count}
+                  autoFocus
+                  placeholder="생성 개수"
+                  disabled={busy || formIsStale}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    setCount(nextValue === "" ? "" : Number(nextValue));
+                  }}
+                />
+                <HeaderCommandButton
+                  label={generating ? "응답 생성 중" : "응답 생성"}
+                  symbol="auto_awesome"
+                  disabled={busy || formIsStale || !isValidResponseCount(count)}
+                />
+              </form>
+            </HeaderCommandSlot>
+          )}
 
           <div className="workspace-actions">
             <HeaderToolButton
@@ -1537,64 +1616,6 @@ export function Workbench() {
             />
           </div>
         </div>
-
-        {activeHeaderPanel === "url" && (
-          <HeaderCommandPanel
-            id="header-url-panel"
-            onEscape={() => closeHeaderPanel("url")}
-          >
-            <UrlImportForm
-              value={url}
-              analyzing={analyzing}
-              disabled={busy}
-              autoFocus={Boolean(form)}
-              onValueChange={updateUrlValue}
-              onSubmit={analyzeForm}
-            />
-          </HeaderCommandPanel>
-        )}
-
-        {form && activeHeaderPanel === "generate" && (
-          <HeaderCommandPanel
-            id="header-generation-panel"
-            onEscape={() => closeHeaderPanel("generate")}
-          >
-            <form
-              className="command-field header-command-form"
-              aria-busy={generating}
-              onSubmit={(event) => {
-                event.preventDefault();
-                void generate();
-              }}
-            >
-              <label className="sr-only" htmlFor="response-count">생성 개수</label>
-              <ControlInput
-                variant="command"
-                className="header-count-input"
-                id="response-count"
-                type="number"
-                min={MIN_RESPONSE_COUNT}
-                max={MAX_RESPONSE_COUNT}
-                step={1}
-                inputMode="numeric"
-                required
-                value={count}
-                autoFocus
-                placeholder="생성 개수"
-                disabled={busy || formIsStale}
-                onChange={(event) => {
-                  const nextValue = event.target.value;
-                  setCount(nextValue === "" ? "" : Number(nextValue));
-                }}
-              />
-              <HeaderCommandButton
-                label={generating ? "응답 생성 중" : "응답 생성"}
-                symbol="auto_awesome"
-                disabled={busy || formIsStale || !isValidResponseCount(count)}
-              />
-            </form>
-          </HeaderCommandPanel>
-        )}
 
         <div className="workspace-nav-row">
           <div

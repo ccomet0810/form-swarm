@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { HeaderCommandButton, HeaderToolButton } from "../app/components/header-controls";
+import { HeaderCommandBackButton, HeaderCommandButton, HeaderToolButton } from "../app/components/header-controls";
 
 describe("header controls", () => {
   it("renders toolbar actions as accessible icon-only buttons", () => {
@@ -49,5 +49,24 @@ describe("header controls", () => {
     expect(markup).toContain("disabled");
     expect(markup).toContain('>auto_awesome</span>');
     expect(markup).not.toContain('>응답 생성</');
+  });
+
+  it("uses an accessible non-navigating back control for mobile command mode", () => {
+    const markup = renderToStaticMarkup(createElement(HeaderCommandBackButton, {
+      label: "링크 입력 닫기",
+      onClick: () => undefined,
+    }));
+
+    expect(markup).toContain('class="header-command-back icon-button icon-button--plain"');
+    expect(markup).toContain('type="button"');
+    expect(markup).toContain('aria-label="링크 입력 닫기"');
+    expect(markup).toContain(">chevron_left</span>");
+
+    const busyMarkup = renderToStaticMarkup(createElement(HeaderCommandBackButton, {
+      label: "응답 생성 설정 닫기",
+      disabled: true,
+      onClick: () => undefined,
+    }));
+    expect(busyMarkup).toContain("disabled");
   });
 });
