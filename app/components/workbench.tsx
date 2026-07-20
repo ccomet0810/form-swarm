@@ -58,8 +58,7 @@ interface RuleIssue {
   message: string;
 }
 
-type TextGenerationMode = "rules" | "ai" | "manual";
-type TextSource = TextGenerationMode | "rules";
+type TextGenerationMode = "ai" | "manual";
 type PreviewTab = "summary" | "question" | "individual";
 type WorkspaceTab = "questions" | PreviewTab;
 type DisplayFormItem = FormQuestion | Exclude<FormItem, { kind: "section" }>;
@@ -89,24 +88,6 @@ function defaultAiPrompt(question: FormQuestion): string {
     constraints.maxLength !== undefined ? `최대 ${constraints.maxLength}자` : null,
   ].filter(Boolean).join(", ");
   return `문항의 제목과 설명을 반영해 ${format} 서로 다른 응답을 생성해 주세요.${limits ? ` 조건: ${limits}.` : ""}`;
-}
-
-function ruleGeneratedTextLabel(question: FormQuestion): string {
-  const constraints = constraintsForQuestion(question);
-  if (constraints.textKind === "email") return "테스트 이메일 자동 생성";
-  if (constraints.textKind === "url") return "테스트 URL 자동 생성";
-  if (constraints.excludedNumberRange) {
-    return `${constraints.excludedNumberRange.min}–${constraints.excludedNumberRange.max} 제외 무작위`;
-  }
-  if (constraints.textKind === "number") {
-    if (constraints.minValue !== undefined && constraints.maxValue !== undefined) {
-      return `${constraints.minValue}–${constraints.maxValue} 범위 내 무작위`;
-    }
-    if (constraints.minValue !== undefined) return `${constraints.minValue} 이상 무작위`;
-    if (constraints.maxValue !== undefined) return `${constraints.maxValue} 이하 무작위`;
-    return "숫자 무작위";
-  }
-  return "자동 생성";
 }
 
 function usableOtherLines(question: FormQuestion, values: string[]): string[] {
@@ -823,7 +804,7 @@ function RuleEditor({
 }: {
   question: FormQuestion;
   rule: GenerationRule | undefined;
-  textSource: TextSource;
+  textSource: TextGenerationMode;
   aiPrompt: string;
   onTextSourceChange: (source: TextGenerationMode) => void;
   onAiPromptChange: (prompt: string) => void;
@@ -862,11 +843,8 @@ function RuleEditor({
             value={textSource}
             onChange={(event) => onTextSourceChange(event.target.value as TextGenerationMode)}
           >
-            {hasStructuredTextRule(question) && (
-              <option value="rules">{ruleGeneratedTextLabel(question)}</option>
-            )}
-            <option value="ai">AI 자동 생성</option>
-            <option value="manual">직접 입력 목록</option>
+            <option value="ai">AI 프롬프트</option>
+            <option value="manual">직접 입력</option>
           </select>
         </label>
         {textSource === "ai" && (
@@ -1001,7 +979,7 @@ function QuestionView({
 }: {
   question: FormQuestion;
   rule: GenerationRule | undefined;
-  textSource: TextSource;
+  textSource: TextGenerationMode;
   aiPrompt: string;
   onTextSourceChange: (source: TextGenerationMode) => void;
   onAiPromptChange: (prompt: string) => void;
@@ -1193,12 +1171,6 @@ function isConfigurableTextQuestion(question: FormQuestion): boolean {
   return question.type === "short_text" || question.type === "paragraph";
 }
 
-function hasStructuredTextRule(question: FormQuestion): boolean {
-  if (question.type !== "short_text") return false;
-  const constraints = constraintsForQuestion(question);
-  return constraints.textKind !== "plain" || Boolean(constraints.excludedNumberRange);
-}
-
 export function Workbench() {
   const [url, setUrl] = useState("");
   const [analyzedUrl, setAnalyzedUrl] = useState<string | null>(null);
@@ -1342,7 +1314,7 @@ export function Workbench() {
       setTextGenerationModes(Object.fromEntries(
         payload.form.questions
           .filter(isConfigurableTextQuestion)
-          .map((question) => [question.id, hasStructuredTextRule(question) ? "rules" : "ai"] as const),
+          .map((question) => [question.id, "ai"] as const),
       ));
       setAiPrompts(Object.fromEntries(
         payload.form.questions
@@ -1383,14 +1355,10 @@ export function Workbench() {
     setWorkspaceTab("questions");
   }
 
-  async function rulesWithAiAnswers(requestedCount: number): Promise<{
-    rules: GenerationRule[];
-    fallbackCount: number;
-  }> {
-    if (!form) return { rules, fallbackCount: 0 };
+  async function rulesWithAiAnswers(requestedCount: number): Promise<GenerationRule[]> {
+    if (!form) return rules;
     const textQuestions = form.questions.filter(isConfigurableTextQuestion);
     const aiSampleCount = Math.min(requestedCount, 100);
-    let fallbackCount = 0;
     let nextRules = rules.map((rule) => {
       if (rule.kind === "text") {
         const source = textGenerationModes[rule.questionId] ?? "ai";
@@ -1414,44 +1382,40 @@ export function Workbench() {
       if ((textGenerationModes[question.id] ?? "ai") !== "ai") continue;
       setMessage(`AI 응답 생성 중 (${index + 1}/${textQuestions.length})`);
       const constraints = constraintsForQuestion(question);
-      try {
-        const result = await fetch("/api/ai/generate-text", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            question: {
-              id: question.id,
-              type: question.type,
-              title: question.title,
-              description: question.description,
-              required: question.required,
-              ...(constraints.minLength !== undefined ? { minLength: constraints.minLength } : {}),
-              ...(constraints.maxLength !== undefined ? { maxLength: constraints.maxLength } : {}),
-              textKind: constraints.textKind,
-              ...(constraints.minValue !== undefined ? { minValue: constraints.minValue } : {}),
-              ...(constraints.maxValue !== undefined ? { maxValue: constraints.maxValue } : {}),
-              ...(constraints.excludedNumberRange ? { excludedNumberRange: constraints.excludedNumberRange } : {}),
-              ...(constraints.pattern ? { pattern: constraints.pattern } : {}),
-            },
-            count: aiSampleCount,
-            existingAnswers: [],
-            locale: form.locale || "ko",
-            prompt: aiPrompts[question.id]?.trim() || undefined,
-          }),
-        });
-        const payload = await result.json() as { answers?: string[]; error?: { message?: string } };
-        if (!result.ok || !payload.answers?.length) {
-          throw new Error(payload.error?.message ?? `“${question.title}” 문구를 생성하지 못했습니다.`);
-        }
-        nextRules = nextRules.map((rule) => rule.questionId === question.id && rule.kind === "text"
-          ? { ...rule, mode: "sequence", samples: payload.answers! }
-          : rule);
-      } catch {
-        fallbackCount += 1;
+      const result = await fetch("/api/ai/generate-text", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          question: {
+            id: question.id,
+            type: question.type,
+            title: question.title,
+            description: question.description,
+            required: question.required,
+            ...(constraints.minLength !== undefined ? { minLength: constraints.minLength } : {}),
+            ...(constraints.maxLength !== undefined ? { maxLength: constraints.maxLength } : {}),
+            textKind: constraints.textKind,
+            ...(constraints.minValue !== undefined ? { minValue: constraints.minValue } : {}),
+            ...(constraints.maxValue !== undefined ? { maxValue: constraints.maxValue } : {}),
+            ...(constraints.excludedNumberRange ? { excludedNumberRange: constraints.excludedNumberRange } : {}),
+            ...(constraints.pattern ? { pattern: constraints.pattern } : {}),
+          },
+          count: aiSampleCount,
+          existingAnswers: [],
+          locale: form.locale || "ko",
+          prompt: aiPrompts[question.id]?.trim() || undefined,
+        }),
+      });
+      const payload = await result.json() as { answers?: string[]; error?: { message?: string } };
+      if (!result.ok || !payload.answers?.length) {
+        throw new Error(payload.error?.message ?? `“${question.title}” AI 응답을 생성하지 못했습니다.`);
       }
+      nextRules = nextRules.map((rule) => rule.questionId === question.id && rule.kind === "text"
+        ? { ...rule, mode: "sequence", samples: payload.answers! }
+        : rule);
     }
 
-    return { rules: nextRules, fallbackCount };
+    return nextRules;
   }
 
   async function generate() {
@@ -1516,16 +1480,14 @@ export function Workbench() {
     promptSuggestionRequestRef.current += 1;
 
     try {
-      const prepared = await rulesWithAiAnswers(requestedCount);
+      const preparedRules = await rulesWithAiAnswers(requestedCount);
       const seed = `${form.source.publicId}:${Date.now()}:${crypto.randomUUID()}`;
-      const generated = generateResponses({ form, rules: prepared.rules, count: requestedCount, seed });
+      const generated = generateResponses({ form, rules: preparedRules, count: requestedCount, seed });
       setResponses(generated);
       setWorkspaceTab("summary");
       setSelectedQuestionIndex(0);
       setSelectedResponseIndex(0);
-      setMessage(prepared.fallbackCount > 0
-        ? `${generated.length}개 응답 생성 완료 · AI ${prepared.fallbackCount}개 기본 생성으로 대체`
-        : `${generated.length}개 응답 생성 완료`);
+      setMessage(`${generated.length}개 응답 생성 완료`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "응답을 생성하지 못했습니다.");
       setMessage(null);
@@ -1775,8 +1737,8 @@ export function Workbench() {
                           question={item}
                           rule={ruleMap.get(item.id)}
                           textSource={isConfigurableTextQuestion(item)
-                            ? (textGenerationModes[item.id] ?? (hasStructuredTextRule(item) ? "rules" : "ai"))
-                            : "rules"}
+                            ? (textGenerationModes[item.id] ?? "ai")
+                            : "ai"}
                           aiPrompt={aiPrompts[item.id] ?? ""}
                           onTextSourceChange={(source) => updateTextSource(item.id, source)}
                           onAiPromptChange={(prompt) => updateAiPrompt(item.id, prompt)}
