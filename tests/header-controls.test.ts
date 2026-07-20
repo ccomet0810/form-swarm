@@ -12,7 +12,7 @@ describe("header controls", () => {
       onClick: () => undefined,
     }));
 
-    expect(markup).toContain('class="header-icon-button"');
+    expect(markup).toContain('class="header-icon-button icon-button icon-button--plain"');
     expect(markup).toContain('aria-label="실제 제출"');
     expect(markup).toContain('title="실제 제출"');
     expect(markup).toContain('>send</span>');
@@ -26,7 +26,7 @@ describe("header controls", () => {
       disabled: true,
     }));
 
-    expect(markup).toContain('class="header-command-button"');
+    expect(markup).toContain('class="header-command-button icon-button icon-button--joined"');
     expect(markup).toContain('aria-label="응답 생성"');
     expect(markup).toContain("disabled");
     expect(markup).toContain('>auto_awesome</span>');

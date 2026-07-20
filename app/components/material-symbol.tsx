@@ -2,6 +2,8 @@ import type { CSSProperties } from "react";
 
 export type MaterialSymbolName =
   | "auto_awesome"
+  | "chevron_left"
+  | "chevron_right"
   | "circle"
   | "expand_more"
   | "favorite"

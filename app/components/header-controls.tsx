@@ -1,5 +1,6 @@
 import type { ReactNode, Ref } from "react";
-import { MaterialSymbol, type MaterialSymbolName } from "./material-symbol";
+import { IconButton } from "./form-controls";
+import type { MaterialSymbolName } from "./material-symbol";
 
 export function HeaderToolButton({
   buttonRef,
@@ -23,19 +24,20 @@ export function HeaderToolButton({
   onClick: () => void;
 }) {
   return (
-    <button
+    <IconButton
       ref={buttonRef}
       className="header-icon-button"
-      type="button"
-      aria-label={label}
+      variant="plain"
+      label={label}
+      symbol={symbol}
+      symbolSize={22}
+      filled={filled}
       aria-controls={controls}
       aria-expanded={expanded}
       title={title}
       disabled={disabled}
       onClick={onClick}
-    >
-      <MaterialSymbol name={symbol} size={22} filled={filled} />
-    </button>
+    />
   );
 }
 
@@ -73,14 +75,14 @@ export function HeaderCommandButton({
   disabled?: boolean;
 }) {
   return (
-    <button
+    <IconButton
       className="header-command-button"
       type="submit"
-      aria-label={label}
-      title={label}
+      variant="joined"
+      label={label}
+      symbol={symbol}
+      symbolSize={21}
       disabled={disabled}
-    >
-      <MaterialSymbol name={symbol} size={21} />
-    </button>
+    />
   );
 }

@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type {
   FormImageRef,
   FormItem,
@@ -25,9 +25,12 @@ import {
   MIN_RESPONSE_COUNT,
 } from "../../lib/ui/response-count";
 import { HeaderCommandButton, HeaderCommandPanel, HeaderToolButton } from "./header-controls";
+import { AutoGrowTextarea, ControlInput, ControlSelect } from "./form-controls";
 import { MaterialSymbol } from "./material-symbol";
 import { QuestionHeading } from "./question-heading";
+import { ResponseNavigator } from "./response-navigator";
 import { ResponseSummaryCard } from "./response-summary";
+import { UrlImportForm } from "./url-import-form";
 
 // These are Google Forms API v1 union member names derived from our normalized
 // responder-HTML type. They are mappings, not fields read from a Forms API response.
@@ -111,59 +114,15 @@ function usableOtherLines(question: FormQuestion, values: string[]): string[] {
   )];
 }
 
-function AutoGrowTextarea({
-  id,
-  value,
-  onValueChange,
-  ariaDescribedBy,
-  placeholder,
-  maxLength,
-  invalid = false,
+function InfoDetails({
+  children,
+  variant = "inline",
 }: {
-  id: string;
-  value: string;
-  onValueChange: (value: string) => void;
-  ariaDescribedBy?: string;
-  placeholder?: string;
-  maxLength?: number;
-  invalid?: boolean;
+  children: React.ReactNode;
+  variant?: "inline" | "card-row";
 }) {
-  const ref = useRef<HTMLTextAreaElement>(null);
-
-  useLayoutEffect(() => {
-    const element = ref.current;
-    if (!element) return;
-    const resize = () => {
-      element.style.height = "auto";
-      const styles = window.getComputedStyle(element);
-      const borderHeight =
-        Number.parseFloat(styles.borderTopWidth) +
-        Number.parseFloat(styles.borderBottomWidth);
-      element.style.height = `${element.scrollHeight + borderHeight}px`;
-    };
-    resize();
-    window.addEventListener("resize", resize);
-    return () => window.removeEventListener("resize", resize);
-  }, [value]);
-
   return (
-    <textarea
-      ref={ref}
-      id={id}
-      rows={3}
-      value={value}
-      aria-describedby={ariaDescribedBy}
-      aria-invalid={invalid || undefined}
-      placeholder={placeholder}
-      maxLength={maxLength}
-      onChange={(event) => onValueChange(event.target.value)}
-    />
-  );
-}
-
-function InfoDetails({ children }: { children: React.ReactNode }) {
-  return (
-    <details className="info-details">
+    <details className={`info-details${variant === "card-row" ? " info-details--card-row" : ""}`}>
       <summary>
         <MaterialSymbol name="expand_more" size={18} className="info-details-chevron" />
         <span>정보</span>
@@ -471,53 +430,6 @@ function QuestionAnswerPreview({ question }: { question: FormQuestion }) {
   return null;
 }
 
-function ResponseNavigator({
-  label,
-  index,
-  total,
-  onChange,
-}: {
-  label: "문항" | "응답";
-  index: number;
-  total: number;
-  onChange: (index: number) => void;
-}) {
-  const clampedIndex = Math.max(0, Math.min(total - 1, index));
-  return (
-    <div className="response-navigator" role="group" aria-label={`${label} 이동`}>
-      <button
-        type="button"
-        disabled={clampedIndex <= 0}
-        onClick={() => onChange(clampedIndex - 1)}
-      >
-        이전
-      </button>
-      <label>
-        <span className="sr-only">{label} 번호</span>
-        <input
-          type="number"
-          min={1}
-          max={total}
-          value={clampedIndex + 1}
-          onChange={(event) => {
-            const value = Number(event.target.value);
-            if (Number.isFinite(value)) onChange(Math.max(0, Math.min(total - 1, value - 1)));
-          }}
-        />
-      </label>
-      <span aria-hidden="true">/</span>
-      <b>{total}</b>
-      <button
-        type="button"
-        disabled={clampedIndex >= total - 1}
-        onClick={() => onChange(clampedIndex + 1)}
-      >
-        다음
-      </button>
-    </div>
-  );
-}
-
 function ReadonlyGeneratedAnswer({
   question,
   answer,
@@ -764,7 +676,7 @@ function OtherAnswerEditor({
     <div className="other-answer-editor">
       <label>
         기타 직접 입력
-        <select
+        <ControlSelect
           value={other.enabled ? "manual" : "off"}
           onChange={(event) => {
             const enabled = event.target.value === "manual";
@@ -785,14 +697,14 @@ function OtherAnswerEditor({
         >
           <option value="off">사용 안 함</option>
           <option value="manual">직접 입력 목록에서 생성</option>
-        </select>
+        </ControlSelect>
       </label>
       {other.enabled && (
         <>
           <label>
             기타 선택 비율
             <span className="percent-input">
-              <input
+              <ControlInput
                 type="number"
                 min={1}
                 max={100}
@@ -878,13 +790,13 @@ function RuleEditor({
       <div className="rule-editor">
         <label>
           생성 방식
-          <select
+          <ControlSelect
             value={textSource}
             onChange={(event) => onTextSourceChange(event.target.value as TextGenerationMode)}
           >
             <option value="ai">AI 프롬프트</option>
             <option value="manual">직접 입력</option>
-          </select>
+          </ControlSelect>
         </label>
         {textSource === "ai" && (
           <label className="wide-field ai-prompt-field" htmlFor={`ai-prompt-${question.id}`}>
@@ -930,19 +842,19 @@ function RuleEditor({
       <div className="rule-editor">
         <label>
           생성 방식
-          <select
+          <ControlSelect
             value={rule.mode}
             onChange={(event) => onChange({ ...rule, mode: event.target.value as "uniform" | "middle_weighted" | "fixed" })}
           >
             <option value="uniform">균등 무작위</option>
             <option value="middle_weighted">가운데 값 중심</option>
             <option value="fixed">고정 선택</option>
-          </select>
+          </ControlSelect>
         </label>
         {rule.mode === "fixed" && (
           <label>
             고정 선택지
-            <select
+            <ControlSelect
               value={rule.fixedValue ?? options[0]?.value ?? ""}
               onChange={(event) => onChange({ ...rule, fixedValue: event.target.value })}
             >
@@ -951,7 +863,7 @@ function RuleEditor({
                   {option.label}
                 </option>
               ))}
-            </select>
+            </ControlSelect>
           </label>
         )}
         {rule.mode !== "fixed" && (
@@ -967,7 +879,7 @@ function RuleEditor({
       <div className="rule-editor">
         <label>
           최소 선택 수
-          <input
+          <ControlInput
             type="number"
             min={question.required ? 1 : 0}
             max={maximum}
@@ -977,7 +889,7 @@ function RuleEditor({
         </label>
         <label>
           최대 선택 수
-          <input
+          <ControlInput
             type="number"
             min={1}
             max={maximum}
@@ -994,13 +906,13 @@ function RuleEditor({
     <div className="rule-editor">
       <label>
         생성 방식
-        <select
+        <ControlSelect
           value={rule.mode}
           onChange={(event) => onChange({ ...rule, mode: event.target.value as "uniform" | "middle_weighted" })}
         >
           <option value="uniform">행별 균등 무작위</option>
           <option value="middle_weighted">가운데 열 중심</option>
-        </select>
+        </ControlSelect>
       </label>
     </div>
   );
@@ -1058,7 +970,7 @@ function QuestionView({
         </div>
       </div>
 
-      <InfoDetails>
+      <InfoDetails variant="card-row">
         <QuestionTypeInfo question={question} />
         <dt>FormQuestion.required</dt><dd>{String(question.required)}</dd>
         <dt>FormQuestion.itemId</dt><dd>{question.itemId}</dd>
@@ -1253,6 +1165,13 @@ export function Workbench() {
     requestAnimationFrame(() => {
       (panel === "url" ? linkTriggerRef : generateTriggerRef).current?.focus();
     });
+  }
+
+  function updateUrlValue(nextUrl: string) {
+    setUrl(nextUrl);
+    setError(null);
+    setMessage(null);
+    setRuleIssue(null);
   }
 
   function selectWorkspaceTab(tab: WorkspaceTab) {
@@ -1609,32 +1528,14 @@ export function Workbench() {
           )}
 
           {!form && (
-            <form className="import-form initial-import-form joined-control" onSubmit={analyzeForm} aria-busy={analyzing}>
-              <label className="sr-only" htmlFor="form-url">Google Forms 링크</label>
-              <input
-                id="form-url"
-                type="url"
-                value={url}
-                onChange={(event) => {
-                  setUrl(event.target.value);
-                  setError(null);
-                  setMessage(null);
-                  setRuleIssue(null);
-                }}
-                placeholder="Google Forms 링크"
-                maxLength={2_048}
-                disabled={busy}
-                required
-              />
-              <button
-                type="submit"
-                aria-label={analyzing ? "Google Forms 분석 중" : "Google Forms 검색"}
-                disabled={busy}
-              >
-                <MaterialSymbol name="search" size={20} />
-                <span>{analyzing ? "분석 중" : "검색"}</span>
-              </button>
-            </form>
+            <UrlImportForm
+              variant="hero"
+              value={url}
+              analyzing={analyzing}
+              disabled={busy}
+              onValueChange={updateUrlValue}
+              onSubmit={analyzeForm}
+            />
           )}
 
           {form && (
@@ -1652,7 +1553,7 @@ export function Workbench() {
               <HeaderToolButton
                 buttonRef={generateTriggerRef}
                 label={generating ? "응답 생성 중" : "응답 생성 설정"}
-                title="응답 생성"
+                title="응답 생성 설정"
                 symbol="auto_awesome"
                 controls={headerPanel === "generate" ? "header-generation-panel" : undefined}
                 expanded={headerPanel === "generate"}
@@ -1676,30 +1577,15 @@ export function Workbench() {
             id="header-url-panel"
             onEscape={() => closeHeaderPanel("url")}
           >
-            <form className="import-form joined-control header-command-form" onSubmit={analyzeForm} aria-busy={analyzing}>
-              <label className="sr-only" htmlFor="form-url">Google Forms 링크</label>
-              <input
-                id="form-url"
-                type="url"
-                value={url}
-                autoFocus
-                onChange={(event) => {
-                  setUrl(event.target.value);
-                  setError(null);
-                  setMessage(null);
-                  setRuleIssue(null);
-                }}
-                placeholder="Google Forms 링크"
-                maxLength={2_048}
-                disabled={busy}
-                required
-              />
-              <HeaderCommandButton
-                label={analyzing ? "Google Forms 분석 중" : "Google Forms 분석"}
-                symbol="search"
-                disabled={busy}
-              />
-            </form>
+            <UrlImportForm
+              variant="command"
+              value={url}
+              analyzing={analyzing}
+              disabled={busy}
+              autoFocus
+              onValueChange={updateUrlValue}
+              onSubmit={analyzeForm}
+            />
           </HeaderCommandPanel>
         )}
 
@@ -1717,7 +1603,8 @@ export function Workbench() {
               }}
             >
               <label className="sr-only" htmlFor="response-count">생성 개수</label>
-              <input
+              <ControlInput
+                variant="command"
                 className="header-count-input"
                 id="response-count"
                 type="number"
@@ -1894,7 +1781,8 @@ export function Workbench() {
               <div className="preview-navigator-bar">
                 <label className="question-picker">
                   <span className="sr-only">문항 선택</span>
-                  <select
+                  <ControlSelect
+                    variant="toolbar"
                     value={selectedQuestion.id}
                     onChange={(event) => setSelectedQuestionIndex(
                       Math.max(0, form.questions.findIndex((question) => question.id === event.target.value)),
@@ -1903,7 +1791,7 @@ export function Workbench() {
                     {form.questions.map((question) => (
                       <option key={question.id} value={question.id}>{question.title || "제목 없는 문항"}</option>
                     ))}
-                  </select>
+                  </ControlSelect>
                 </label>
                 <ResponseNavigator
                   label="문항"
