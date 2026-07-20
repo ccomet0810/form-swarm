@@ -7,7 +7,7 @@ import {
 } from "react";
 import { MaterialSymbol, type MaterialSymbolName } from "./material-symbol";
 
-type ControlVariant = "editor" | "command" | "toolbar";
+type ControlVariant = "editor" | "command";
 
 function classNames(...values: Array<string | false | null | undefined>): string {
   return values.filter(Boolean).join(" ");
@@ -29,13 +29,25 @@ export function ControlInput({
 export function ControlSelect({
   variant = "editor",
   className,
+  wrapperClassName,
+  disabled,
   ...props
-}: ComponentPropsWithRef<"select"> & { variant?: ControlVariant }) {
+}: ComponentPropsWithRef<"select"> & {
+  variant?: ControlVariant;
+  wrapperClassName?: string;
+}) {
   return (
-    <select
-      {...props}
-      className={classNames("control", "control--select", `control--${variant}`, className)}
-    />
+    <span
+      className={classNames("select-control", `select-control--${variant}`, wrapperClassName)}
+      data-disabled={disabled ? "" : undefined}
+    >
+      <select
+        {...props}
+        disabled={disabled}
+        className={classNames("control", "control--select", `control--${variant}`, className)}
+      />
+      <MaterialSymbol name="expand_more" size={20} className="select-control-icon" />
+    </span>
   );
 }
 

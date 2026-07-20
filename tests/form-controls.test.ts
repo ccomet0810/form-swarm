@@ -12,14 +12,20 @@ describe("form control system", () => {
     }));
     const select = renderToStaticMarkup(createElement(
       ControlSelect,
-      { variant: "toolbar", "aria-label": "문항 선택" },
+      { "aria-label": "문항 선택" },
       createElement("option", { value: "one" }, "첫 문항"),
     ));
 
     expect(input).toContain('class="control control--input control--command"');
     expect(input).toContain('type="url"');
-    expect(select).toContain('class="control control--select control--toolbar"');
+    expect(select).toContain('class="select-control select-control--editor"');
+    expect(select).toContain('class="control control--select control--editor"');
     expect(select).toContain('aria-label="문항 선택"');
+    expect(select).toContain('class="material-symbol select-control-icon"');
+    expect(select).toContain('aria-hidden="true"');
+    expect(select).toContain('>expand_more</span>');
+    expect(select.match(/<select\b/g)).toHaveLength(1);
+    expect(select.match(/aria-label="문항 선택"/g)).toHaveLength(1);
   });
 
   it("renders icon actions with a visible title and accessible name", () => {

@@ -30,6 +30,8 @@
   --space-10: 40px;
   --control-height: 44px;
   --control-padding-inline: 12px;
+  --control-icon-size: 20px;
+  --control-icon-slot: 40px;
   --header-tool-size: var(--control-height);
   --header-command-control-height: var(--control-height);
   --header-command-action-width: var(--control-height);
@@ -100,7 +102,9 @@ html {
   border-radius: 0;
   background: var(--surface);
   color: var(--text);
-  transition: background-color 100ms linear;
+  transition:
+    border-color 100ms linear,
+    background-color 100ms linear;
 }
 
 .control::placeholder {
@@ -108,19 +112,18 @@ html {
   opacity: 1;
 }
 
-.control--editor,
-.control--toolbar {
+.control--editor {
+  --control-frame-color: transparent;
+  --control-underline-color: var(--text);
   height: var(--control-height);
   padding: 0 var(--control-padding-inline);
+  border: 1px solid var(--control-frame-color);
+  border-bottom: var(--border-strong) solid var(--control-underline-color);
 }
 
-.control--editor {
-  border: 1px solid var(--line-soft);
-  border-bottom: var(--border-strong) solid var(--text);
-}
-
-.control--toolbar {
-  border: 1px solid var(--text);
+.control--editor:hover:not(:disabled),
+.control--editor:focus {
+  --control-frame-color: var(--line-soft);
 }
 
 .control--command {
@@ -137,7 +140,40 @@ html {
   resize: none;
 }
 
+.select-control {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.select-control .control--select {
+  padding-inline-end: var(--control-icon-slot);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.select-control-icon {
+  position: absolute;
+  top: 50%;
+  inset-inline-end: calc((var(--control-icon-slot) - var(--control-icon-size)) / 2);
+  color: var(--muted);
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: color 100ms linear;
+}
+
+.select-control:not([data-disabled]):hover .select-control-icon,
+.select-control:focus-within .select-control-icon {
+  color: var(--text);
+}
+
+.select-control[data-disabled] .select-control-icon {
+  opacity: 0.52;
+}
+
 .control[aria-invalid="true"] {
+  --control-underline-color: var(--danger);
   border-bottom-color: var(--danger);
   background: var(--danger-soft);
 }
@@ -1424,6 +1460,11 @@ table {
   background: var(--focus-fill);
 }
 
+.percent-input:hover .control--editor:not(:disabled),
+.percent-input:focus-within .control--editor {
+  --control-frame-color: var(--line-soft);
+}
+
 .rule-editor .wide-field {
   grid-column: 1 / -1;
 }
@@ -1466,12 +1507,19 @@ table {
 .percent-input > span {
   display: grid;
   place-items: center;
-  border: 1px solid var(--line-soft);
-  border-bottom: 2px solid var(--text);
+  border: 1px solid transparent;
+  border-bottom: var(--border-strong) solid var(--text);
   border-left: 0;
   background: var(--surface);
   color: var(--text);
   font-weight: 800;
+}
+
+.percent-input:hover > span,
+.percent-input:focus-within > span {
+  border-color: var(--line-soft);
+  border-bottom-color: var(--text);
+  border-left: 0;
 }
 
 .percent-input .control {
@@ -1497,13 +1545,10 @@ table {
 }
 
 .question-picker,
+.question-picker .select-control,
 .question-picker .control {
   width: 100%;
   min-width: 0;
-}
-
-.question-picker .control {
-  padding: 0 36px 0 12px;
 }
 
 .response-navigator {
@@ -1645,6 +1690,10 @@ table {
 
 .readonly-text-answer--paragraph {
   width: 100%;
+}
+
+.readonly-text-answer[data-empty] {
+  color: var(--muted);
 }
 
 .readonly-dropdown-answer {

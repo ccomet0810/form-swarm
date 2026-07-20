@@ -28,6 +28,7 @@ import { HeaderCommandButton, HeaderCommandPanel, HeaderToolButton } from "./hea
 import { AutoGrowTextarea, ControlInput, ControlSelect } from "./form-controls";
 import { MaterialSymbol } from "./material-symbol";
 import { QuestionHeading } from "./question-heading";
+import { ReadonlyAnswerField } from "./readonly-answer-field";
 import { ResponseNavigator } from "./response-navigator";
 import { ResponseSummaryCard } from "./response-summary";
 import { UrlImportForm } from "./url-import-form";
@@ -430,23 +431,24 @@ function QuestionAnswerPreview({ question }: { question: FormQuestion }) {
   return null;
 }
 
-function ReadonlyGeneratedAnswer({
+export function ReadonlyGeneratedAnswer({
   question,
   answer,
 }: {
   question: FormQuestion;
   answer: GeneratedAnswer | undefined;
 }) {
-  if (!hasGeneratedAnswer(answer)) {
-    return <p className="readonly-empty-answer">응답 없음</p>;
-  }
-
   if (question.type === "short_text" || question.type === "paragraph") {
     return (
-      <div className={`readonly-text-answer readonly-text-answer--${question.type}`}>
-        {answerLabel(answer)}
-      </div>
+      <ReadonlyAnswerField
+        kind={question.type}
+        value={hasGeneratedAnswer(answer) ? answerLabel(answer) : undefined}
+      />
     );
+  }
+
+  if (!hasGeneratedAnswer(answer)) {
+    return <p className="readonly-empty-answer">응답 없음</p>;
   }
 
   if (question.type === "single_choice" || question.type === "checkboxes") {
@@ -1782,7 +1784,6 @@ export function Workbench() {
                 <label className="question-picker">
                   <span className="sr-only">문항 선택</span>
                   <ControlSelect
-                    variant="toolbar"
                     value={selectedQuestion.id}
                     onChange={(event) => setSelectedQuestionIndex(
                       Math.max(0, form.questions.findIndex((question) => question.id === event.target.value)),
