@@ -29,6 +29,11 @@
   --space-8: 32px;
   --space-10: 40px;
   --control-height: 44px;
+  --header-tool-size: 44px;
+  --header-command-control-height: 46px;
+  --header-command-action-width: 48px;
+  --header-icon-idle: #666662;
+  --header-icon-active: var(--text);
   --disclosure-height: 32px;
   --card-padding: var(--space-5);
   --item-gap: var(--space-4);
@@ -36,7 +41,7 @@
   --border-strong: 2px;
   --header-primary-height: 64px;
   --header-nav-height: 42px;
-  --header-panel-height: 62px;
+  --header-panel-height: calc(var(--header-command-control-height) + var(--space-4));
   --compact-search-height: calc(var(--header-primary-height) + var(--header-nav-height) + var(--border-strong));
   --anchor-offset: calc(var(--compact-search-height) + var(--space-4));
   --content-column: 900px;
@@ -307,7 +312,7 @@ summary:focus-visible {
 .joined-control input {
   width: 100%;
   min-width: 0;
-  height: 46px;
+  height: var(--header-command-control-height);
   padding: 0 14px;
   border: var(--border-strong) solid var(--line-strong);
   border-right: 0;
@@ -316,8 +321,13 @@ summary:focus-visible {
   color: var(--text);
 }
 
+.joined-control input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
 .joined-control > button {
-  height: 46px;
+  height: var(--header-command-control-height);
 }
 
 .field input,
@@ -344,7 +354,7 @@ summary:focus-visible {
 }
 
 .primary-button,
-.import-form button,
+.initial-import-form > button,
 .submit-button {
   min-height: var(--control-height);
   padding: 0 16px;
@@ -358,12 +368,12 @@ summary:focus-visible {
     color 120ms linear;
 }
 
-.is-idle .import-form button {
+.is-idle .initial-import-form > button {
   height: 60px;
   min-height: 60px;
 }
 
-.is-workspace .import-form button {
+.is-workspace .initial-import-form > button {
   height: 46px;
 }
 
@@ -435,46 +445,33 @@ summary:focus-visible {
 .workspace-actions {
   display: flex;
   min-width: 0;
-  min-height: 44px;
+  min-height: var(--header-tool-size);
   align-items: center;
   gap: 2px;
   justify-self: end;
 }
 
 .header-icon-button {
-  width: 44px;
-  height: 44px;
+  width: var(--header-tool-size);
+  height: var(--header-tool-size);
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: var(--text);
-  transition:
-    background-color 100ms linear,
-    color 100ms linear;
+  color: var(--header-icon-idle);
+  transition: color 100ms linear;
 }
 
 .header-icon-button:hover:not(:disabled),
 .header-icon-button[aria-expanded="true"] {
-  background: var(--text);
-  color: var(--surface);
+  background: transparent;
+  color: var(--header-icon-active);
 }
 
-.header-icon-button--primary {
-  background: var(--text);
-  color: var(--surface);
-}
-
-.header-icon-button--primary:hover:not(:disabled) {
-  background: var(--soft);
-  color: var(--text);
-}
-
-.header-icon-button:focus-visible,
-.header-command-button:focus-visible {
+.header-icon-button:focus-visible {
   outline: 0;
-  background: var(--focus-fill);
-  color: var(--text);
+  background: transparent;
+  color: var(--header-icon-active);
   text-decoration: none;
 }
 
@@ -490,63 +487,67 @@ summary:focus-visible {
 }
 
 .header-command-form {
-  width: min(100%, 680px);
-  max-width: 100%;
+  width: 100%;
+  max-width: none;
 }
 
-.header-command-form.import-form {
-  grid-template-columns: minmax(0, 1fr) 48px;
+.joined-control.header-command-form {
+  grid-template-columns: minmax(0, 1fr) var(--header-command-action-width);
 }
 
-.header-command-form--count {
-  width: min(100%, 280px);
-}
-
-.generation-control {
-  grid-template-columns: minmax(0, 1fr) 48px;
-}
-
-.generation-control input {
+.header-count-input {
   font-variant-numeric: tabular-nums;
 }
 
-.generation-control input::placeholder {
-  color: var(--muted);
-  opacity: 1;
-}
-
-.generation-control input[type="number"] {
+.header-count-input[type="number"] {
   appearance: textfield;
 }
 
-.generation-control input::-webkit-inner-spin-button,
-.generation-control input::-webkit-outer-spin-button {
+.header-count-input::-webkit-inner-spin-button,
+.header-count-input::-webkit-outer-spin-button {
   margin: 0;
   appearance: none;
 }
 
 .header-command-button {
-  width: 48px;
-  height: 46px;
+  width: var(--header-command-action-width);
+  height: var(--header-command-control-height);
   padding: 0;
   border: var(--border-strong) solid var(--text);
   border-radius: 0;
-  background: var(--text);
-  color: var(--surface);
-  transition:
-    background-color 100ms linear,
-    color 100ms linear;
+  background: var(--surface);
+  color: var(--header-icon-idle);
+  transition: color 100ms linear;
 }
 
 .header-command-button:hover:not(:disabled) {
   background: var(--surface);
+  color: var(--header-icon-active);
+}
+
+.header-command-button:focus-visible {
+  outline: 0;
+  background: var(--surface);
+  color: var(--header-icon-active);
+  text-decoration: none;
+}
+
+.primary-button:hover:not(:disabled) {
+  background: var(--surface);
   color: var(--text);
 }
 
-.primary-button:hover:not(:disabled),
-.import-form button:hover:not(:disabled) {
-  background: var(--surface);
-  color: var(--text);
+.initial-import-form > button:hover:not(:disabled) {
+  background: var(--text);
+  color: var(--surface);
+}
+
+.initial-import-form > button .material-symbol {
+  transition: color 100ms linear;
+}
+
+.initial-import-form > button:hover:not(:disabled) .material-symbol {
+  color: var(--line-soft);
 }
 
 .status-region {

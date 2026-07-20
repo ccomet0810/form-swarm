@@ -19,6 +19,13 @@ import { constraintsForQuestion } from "../../lib/generator/constraints";
 import { generateResponses } from "../../lib/generator/engine";
 import { createDefaultRules } from "../../lib/generator/rules";
 import { matchesTextConstraints, validateGeneratedResponse } from "../../lib/generator/validation";
+import {
+  isValidResponseCount,
+  MAX_RESPONSE_COUNT,
+  MIN_RESPONSE_COUNT,
+} from "../../lib/ui/response-count";
+import { HeaderCommandButton, HeaderCommandPanel, HeaderToolButton } from "./header-controls";
+import { MaterialSymbol } from "./material-symbol";
 import { QuestionHeading } from "./question-heading";
 import { ResponseSummaryCard } from "./response-summary";
 
@@ -63,41 +70,6 @@ type PreviewTab = "summary" | "question" | "individual";
 type WorkspaceTab = "questions" | PreviewTab;
 type DisplayFormItem = FormQuestion | Exclude<FormItem, { kind: "section" }>;
 type HeaderPanel = "url" | "generate" | null;
-type MaterialSymbolName =
-  | "auto_awesome"
-  | "circle"
-  | "expand_more"
-  | "favorite"
-  | "link"
-  | "search"
-  | "send"
-  | "star"
-  | "thumb_up";
-
-function MaterialSymbol({
-  name,
-  filled = false,
-  size = 24,
-  className = "",
-}: {
-  name: MaterialSymbolName;
-  filled?: boolean;
-  size?: number;
-  className?: string;
-}) {
-  return (
-    <span
-      className={`material-symbol${className ? ` ${className}` : ""}`}
-      style={{
-        "--symbol-fill": filled ? 1 : 0,
-        "--symbol-size": `${size}px`,
-      } as React.CSSProperties}
-      aria-hidden="true"
-    >
-      {name}
-    </span>
-  );
-}
 
 function nonEmptyLines(values: string[]): string[] {
   return values.map((value) => value.trim()).filter(Boolean);
@@ -1228,7 +1200,7 @@ export function Workbench() {
   const [form, setForm] = useState<ImportedForm | null>(null);
   const [rules, setRules] = useState<GenerationRule[]>([]);
   const [responses, setResponses] = useState<GeneratedResponse[]>([]);
-  const [count, setCount] = useState<number | "">(10);
+  const [count, setCount] = useState<number | "">("");
   const [analyzing, setAnalyzing] = useState(false);
   const [hasLaunched, setHasLaunched] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -1276,12 +1248,7 @@ export function Workbench() {
     setHeaderPanel((current) => current === panel ? null : panel);
   }
 
-  function handleHeaderPanelKeyDown(
-    event: React.KeyboardEvent<HTMLDivElement>,
-    panel: Exclude<HeaderPanel, null>,
-  ) {
-    if (event.key !== "Escape") return;
-    event.preventDefault();
+  function closeHeaderPanel(panel: Exclude<HeaderPanel, null>) {
     setHeaderPanel(null);
     requestAnimationFrame(() => {
       (panel === "url" ? linkTriggerRef : generateTriggerRef).current?.focus();
@@ -1381,6 +1348,7 @@ export function Workbench() {
       setSubmission(null);
       setSelectedQuestionIndex(0);
       setSelectedResponseIndex(0);
+      setCount("");
       setWorkspaceTab("questions");
       setHeaderPanel(null);
       analyzedSuccessfully = true;
@@ -1497,7 +1465,8 @@ export function Workbench() {
 
   async function generate() {
     if (!form || busy || formIsStale) return;
-    const requestedCount = Math.max(1, Math.min(500, Math.floor(count || 1)));
+    if (!isValidResponseCount(count)) return;
+    const requestedCount = count;
 
     for (const question of form.questions) {
       const rule = ruleMap.get(question.id);
@@ -1640,7 +1609,7 @@ export function Workbench() {
           )}
 
           {!form && (
-            <form className="import-form joined-control" onSubmit={analyzeForm} aria-busy={analyzing}>
+            <form className="import-form initial-import-form joined-control" onSubmit={analyzeForm} aria-busy={analyzing}>
               <label className="sr-only" htmlFor="form-url">Google Forms 링크</label>
               <input
                 id="form-url"
@@ -1670,51 +1639,42 @@ export function Workbench() {
 
           {form && (
             <div className="workspace-actions">
-              <button
-                ref={linkTriggerRef}
-                className="header-icon-button"
-                type="button"
-                aria-label="Google Forms 링크 입력"
-                aria-controls={headerPanel === "url" ? "header-url-panel" : undefined}
-                aria-expanded={headerPanel === "url"}
+              <HeaderToolButton
+                buttonRef={linkTriggerRef}
+                label="Google Forms 링크 입력"
                 title="링크 입력"
+                symbol="link"
+                controls={headerPanel === "url" ? "header-url-panel" : undefined}
+                expanded={headerPanel === "url"}
                 disabled={busy}
                 onClick={() => toggleHeaderPanel("url")}
-              >
-                <MaterialSymbol name="link" size={22} />
-              </button>
-              <button
-                ref={generateTriggerRef}
-                className="header-icon-button"
-                type="button"
-                aria-label={generating ? "응답 생성 중" : "응답 생성 설정"}
-                aria-controls={headerPanel === "generate" ? "header-generation-panel" : undefined}
-                aria-expanded={headerPanel === "generate"}
+              />
+              <HeaderToolButton
+                buttonRef={generateTriggerRef}
+                label={generating ? "응답 생성 중" : "응답 생성 설정"}
                 title="응답 생성"
+                symbol="auto_awesome"
+                controls={headerPanel === "generate" ? "header-generation-panel" : undefined}
+                expanded={headerPanel === "generate"}
                 disabled={busy || formIsStale}
                 onClick={() => toggleHeaderPanel("generate")}
-              >
-                <MaterialSymbol name="auto_awesome" size={22} />
-              </button>
-              <button
-                className="header-icon-button header-icon-button--primary"
-                type="button"
-                aria-label={responses.length > 0 ? `${responses.length}개 응답 실제 제출` : "실제 제출"}
+              />
+              <HeaderToolButton
+                label={responses.length > 0 ? `${responses.length}개 응답 실제 제출` : "실제 제출"}
                 title="실제 제출"
+                symbol="send"
+                filled
                 disabled={busy || formIsStale || responses.length === 0 || !allResponsesValid}
                 onClick={() => void submitSequentially()}
-              >
-                <MaterialSymbol name="send" size={22} filled />
-              </button>
+              />
             </div>
           )}
         </div>
 
         {form && headerPanel === "url" && (
-          <div
-            className="header-command-row"
+          <HeaderCommandPanel
             id="header-url-panel"
-            onKeyDown={(event) => handleHeaderPanelKeyDown(event, "url")}
+            onEscape={() => closeHeaderPanel("url")}
           >
             <form className="import-form joined-control header-command-form" onSubmit={analyzeForm} aria-busy={analyzing}>
               <label className="sr-only" htmlFor="form-url">Google Forms 링크</label>
@@ -1734,27 +1694,22 @@ export function Workbench() {
                 disabled={busy}
                 required
               />
-              <button
-                className="header-command-button"
-                type="submit"
-                aria-label={analyzing ? "Google Forms 분석 중" : "Google Forms 분석"}
-                title="분석"
+              <HeaderCommandButton
+                label={analyzing ? "Google Forms 분석 중" : "Google Forms 분석"}
+                symbol="search"
                 disabled={busy}
-              >
-                <MaterialSymbol name="search" size={21} />
-              </button>
+              />
             </form>
-          </div>
+          </HeaderCommandPanel>
         )}
 
         {form && headerPanel === "generate" && (
-          <div
-            className="header-command-row"
+          <HeaderCommandPanel
             id="header-generation-panel"
-            onKeyDown={(event) => handleHeaderPanelKeyDown(event, "generate")}
+            onEscape={() => closeHeaderPanel("generate")}
           >
             <form
-              className="generation-control joined-control header-command-form header-command-form--count"
+              className="joined-control header-command-form"
               aria-busy={generating}
               onSubmit={(event) => {
                 event.preventDefault();
@@ -1763,10 +1718,13 @@ export function Workbench() {
             >
               <label className="sr-only" htmlFor="response-count">생성 개수</label>
               <input
+                className="header-count-input"
                 id="response-count"
                 type="number"
-                min={1}
-                max={500}
+                min={MIN_RESPONSE_COUNT}
+                max={MAX_RESPONSE_COUNT}
+                step={1}
+                inputMode="numeric"
                 required
                 value={count}
                 autoFocus
@@ -1777,17 +1735,13 @@ export function Workbench() {
                   setCount(nextValue === "" ? "" : Number(nextValue));
                 }}
               />
-              <button
-                className="header-command-button"
-                type="submit"
-                aria-label={generating ? "응답 생성 중" : "응답 생성"}
-                title="응답 생성"
-                disabled={busy || formIsStale || count === "" || count < 1 || count > 500}
-              >
-                <MaterialSymbol name="auto_awesome" size={21} />
-              </button>
+              <HeaderCommandButton
+                label={generating ? "응답 생성 중" : "응답 생성"}
+                symbol="auto_awesome"
+                disabled={busy || formIsStale || !isValidResponseCount(count)}
+              />
             </form>
-          </div>
+          </HeaderCommandPanel>
         )}
 
         {form && (
