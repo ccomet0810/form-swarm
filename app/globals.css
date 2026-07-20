@@ -35,7 +35,7 @@
   --header-command-action-width: var(--control-height);
   --header-icon-idle: #666662;
   --header-icon-active: var(--text);
-  --disclosure-height: 32px;
+  --disclosure-height: 40px;
   --card-padding: var(--space-5);
   --item-gap: var(--space-4);
   --field-label-gap: 6px;
@@ -1217,7 +1217,7 @@ summary:focus-visible {
 }
 
 .info-details {
-  margin-top: 17px;
+  margin-top: var(--item-gap);
   border: 0;
   border-top: 1px solid var(--line-soft);
   background: transparent;
@@ -1229,8 +1229,8 @@ summary:focus-visible {
   display: flex;
   min-height: var(--disclosure-height);
   align-items: center;
-  gap: 3px;
-  padding: 6px 0 0;
+  gap: var(--field-label-gap);
+  padding: 0;
   color: var(--muted);
   font-weight: 800;
   list-style: none;
@@ -1263,7 +1263,7 @@ summary:focus-visible {
 .info-details .question-meta {
   grid-template-columns: minmax(190px, max-content) minmax(0, 1fr);
   margin: 0;
-  padding: 8px 0 0;
+  padding: var(--space-3) 0 0;
   border: 0;
   background: transparent;
 }
@@ -1277,7 +1277,7 @@ summary:focus-visible {
 }
 
 .info-details--card-row .question-meta {
-  padding: var(--space-2) var(--card-padding) var(--card-padding);
+  padding: var(--space-3) var(--card-padding) var(--card-padding);
 }
 
 .content-item > .media-image:first-child,
@@ -2327,7 +2327,6 @@ table {
 @media (max-width: 620px) {
   :root {
     --card-padding: var(--space-4);
-    --disclosure-height: 40px;
   }
 
   .brand-stage {

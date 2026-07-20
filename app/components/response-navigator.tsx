@@ -51,7 +51,7 @@ export function ResponseNavigator({
     <div className="response-navigator" role="group" aria-label={`${label} 이동`}>
       <IconButton
         className="response-navigator-button"
-        variant="outlined"
+        variant="plain"
         label={`이전 ${label}`}
         symbol="chevron_left"
         symbolSize={21}
@@ -61,7 +61,7 @@ export function ResponseNavigator({
       <label className="response-index-field">
         <span className="sr-only">{label} 번호</span>
         <ControlInput
-          variant="toolbar"
+          variant="editor"
           className="response-index-input"
           type="number"
           min={1}
@@ -91,7 +91,7 @@ export function ResponseNavigator({
       <span className="sr-only" aria-live="polite">{`${label} ${clampedIndex + 1} / ${total}`}</span>
       <IconButton
         className="response-navigator-button"
-        variant="outlined"
+        variant="plain"
         label={`다음 ${label}`}
         symbol="chevron_right"
         symbolSize={21}
